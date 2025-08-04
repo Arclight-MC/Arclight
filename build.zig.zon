@@ -44,6 +44,14 @@
             .url = "git+https://github.com/Arclight-MC/zig-uuid#5d22e75f3f4addf523dc369fe8931038d87a62e2",
             .hash = "uuid-0.1.0-Q7xwrzo1AACp6daVn2yytZaTU0IZVrgBffTaZL5rciMV",
         },
+        .toml = .{
+            .url = "git+https://github.com/sam701/zig-toml#e40c1046e16601e6ab22892012c397e0bacb7429",
+            .hash = "toml-0.3.0-bV14Bbt6AQBbak_x26I25WIDnqyGTET7Xqj1dxuLFNv4",
+        },
+        .args = .{
+            .url = "git+https://github.com/ikskuh/zig-args?ref=master#4c305bcb45fd3c4b74b7bf7f907cf3fc12f415a2",
+            .hash = "args-0.0.0-CiLiquDRAADuU_ueSmGquhHAuhDxxlfBokGj01ZdVYHt",
+        },
     },
     .paths = .{
         "build.zig",

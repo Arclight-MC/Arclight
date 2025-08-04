@@ -29,6 +29,9 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
+    exe.root_module.addImport("args", b.dependency("args", .{ .target = target, .optimize = optimize }).module("args"));
+    exe.root_module.addImport("toml", b.dependency("toml", .{ .target = target, .optimize = optimize }).module("toml"));
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
@@ -68,4 +71,7 @@ pub fn build(b: *std.Build) void {
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_unit_tests.step);
+
+    const check = b.step("check", "Check if foo compiles");
+    check.dependOn(&exe.step);
 }

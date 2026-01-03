@@ -10,94 +10,6 @@ pub const State = enum {
     Play,
 };
 
-pub const Packet = union(enum) {
-    // Handshaking
-    handshake: Handshake,
-    legacy_server_list_ping: LegacyServerListPing,
-
-    // Status
-    status_request: Status.Request,
-    status_response: Status.Response,
-    ping: Status.Ping,
-    pong: Status.Pong,
-
-    // Login
-    login_start: Login.LoginStart,
-    login_success: Login.LoginSuccess,
-    encryption_request: Login.EncryptionRequest,
-    encryption_response: Login.EncryptionResponse,
-    login_disconnect: Login.Disconnect,
-    login_set_compression: Login.SetCompression,
-
-    // Play (placeholder for now)
-    play_keep_alive: Play.KeepAlive,
-    play_chat_message: Play.ChatMessage,
-    // ... many more play packets
-
-    pub fn read(reader: anytype, state: State, allocator: std.mem.Allocator) !Packet {
-        const packet_id_info = try types.readVarInt(reader);
-        const packet_id = packet_id_info.value;
-
-        return switch (state) {
-            .Handshaking => switch (packet_id) {
-                0x00 => .{ .handshake = try Handshake.read(reader, allocator) },
-                0xFE => .{ .legacy_server_list_ping = try LegacyServerListPing.read(reader) },
-                else => error.UnknownPacket,
-            },
-            .Status => switch (packet_id) {
-                0x00 => .{ .status_request = try Status.Request.read(reader) },
-                0x01 => .{ .ping = try Status.Ping.read(reader) },
-                else => error.UnknownPacket,
-            },
-            .Login => switch (packet_id) {
-                0x00 => .{ .login_start = try Login.LoginStart.read(reader, allocator) },
-                0x01 => .{ .encryption_response = try Login.EncryptionResponse.read(reader, allocator) },
-                else => error.UnknownPacket,
-            },
-            .Play => switch (packet_id) {
-                // TODO: Implement Play state packets
-                else => error.UnknownPacket,
-            },
-        };
-    }
-
-    pub fn write(writer: anytype, packet: Packet, allocator: std.mem.Allocator) !void {
-        const buffer = std.ArrayList(u8).init(allocator);
-        defer buffer.deinit();
-        const temp_writer = buffer.writer();
-
-        switch (packet) {
-            .handshake => {},
-            .legacy_server_list_ping => {},
-            .status_request => {},
-            .status_response => {
-                try types.writeVarInt(temp_writer, 0x00);
-                try types.writeString(temp_writer, packet.status_response.json_response);
-            },
-            .ping => {},
-            .pong => {
-                try types.writeVarInt(temp_writer, 0x01);
-                try types.writeLong(temp_writer, packet.pong.payload);
-            },
-            .login_start => {},
-            .login_success => {
-                try types.writeVarInt(temp_writer, 0x02);
-                try types.writeString(temp_writer, packet.login_success.uuid);
-                try types.writeString(temp_writer, packet.login_success.username);
-            },
-            .encryption_request => {},
-            .encryption_response => {},
-            .login_disconnect => {},
-            .login_set_compression => {},
-            .play_keep_alive => {},
-            .play_chat_message => {},
-        }
-
-        try types.writeVarInt(writer, @as(i32, @intCast(buffer.items.len)));
-        try writer.writeAll(buffer.items);
-    }
-};
-
 // Handshaking Packets
 pub const Handshake = struct {
     protocol_version: types.VarInt,
@@ -176,106 +88,33 @@ pub const Status = struct {
 
 // Login Packets
 pub const Login = struct {
-    pub const LoginStart = struct {
-        name: []u8,
+    pub const LoginStart = serverbound.LoginStart;
+    pub const EncryptionResponse = serverbound.EncryptionResponse;
 
-        pub fn read(reader: anytype, allocator: std.mem.Allocator) !LoginStart {
-            const name = try types.readString(reader, allocator);
-            return .{ .name = name };
-        }
-    };
-
-    pub const LoginSuccess = struct {
-        uuid: []const u8,
-        username: []const u8,
-
-        pub fn write(writer: anytype, login_success: LoginSuccess, allocator: std.mem.Allocator) !void {
-            var buffer = std.ArrayList(u8).init(allocator);
-            defer buffer.deinit();
-            const temp_writer = buffer.writer();
-
-            try types.writeVarInt(temp_writer, 0x02); // Packet ID
-            try types.writeString(temp_writer, login_success.uuid);
-            try types.writeString(temp_writer, login_success.username);
-
-            try types.writeVarInt(writer, @as(i32, @intCast(buffer.items.len)));
-            try writer.writeAll(buffer.items);
-        }
-    };
-
-    pub const EncryptionRequest = struct {
-        // TODO: Implement fields
-        pub fn read(reader: anytype) !EncryptionRequest {
-            _ = reader;
-            return .{};
-        }
-        pub fn write(writer: anytype, req: EncryptionRequest) !void {
-            _ = writer;
-            _ = req;
-        }
-    };
-
-    pub const EncryptionResponse = struct {
-        // TODO: Implement fields
-        pub fn read(reader: anytype, allocator: std.mem.Allocator) !EncryptionResponse {
-            _ = reader;
-            _ = allocator;
-            return .{};
-        }
-        pub fn write(writer: anytype, res: EncryptionResponse) !void {
-            _ = writer;
-            _ = res;
-        }
-    };
-
-    pub const Disconnect = struct {
-        // TODO: Implement fields
-        pub fn read(reader: anytype) !Disconnect {
-            _ = reader;
-            return .{};
-        }
-        pub fn write(writer: anytype, disc: Disconnect) !void {
-            _ = writer;
-            _ = disc;
-        }
-    };
-
-    pub const SetCompression = struct {
-        // TODO: Implement fields
-        pub fn read(reader: anytype) !SetCompression {
-            _ = reader;
-            return .{};
-        }
-        pub fn write(writer: anytype, sc: SetCompression) !void {
-            _ = writer;
-            _ = sc;
-        }
-    };
+    pub const Disconnect = clientbound.LoginDisconnect;
+    pub const EncryptionRequest = clientbound.EncryptionRequest;
+    pub const LoginSuccess = clientbound.LoginSuccess;
+    pub const SetCompression = clientbound.SetCompression;
 };
 
-// Play Packets (placeholders)
+// Play Packets
 pub const Play = struct {
-    pub const KeepAlive = struct {
-        // TODO: Implement fields
-        pub fn read(reader: anytype) !KeepAlive {
-            _ = reader;
-            return .{};
-        }
-        pub fn write(writer: anytype, ka: KeepAlive) !void {
-            _ = writer;
-            _ = ka;
-        }
-    };
-
-    pub const ChatMessage = struct {
-        // TODO: Implement fields
-        pub fn read(reader: anytype) !ChatMessage {
-            _ = reader;
-            return .{};
-        }
-        pub fn write(writer: anytype, cm: ChatMessage) !void {
-            _ = writer;
-            _ = cm;
-        }
-    };
+    pub const KeepAlive = clientbound.KeepAlive;
+    pub const ChatMessage = clientbound.ChatMessage;
+    pub const TimeUpdate = clientbound.TimeUpdate;
+    pub const JoinGame = clientbound.JoinGame;
+    pub const PlayerPositionAndLook = clientbound.PlayerPositionAndLook;
+    pub const ChunkData = clientbound.ChunkData;
+    pub const SpawnPlayer = clientbound.SpawnPlayer;
+    pub const DestroyEntities = clientbound.DestroyEntities;
+    pub const EntityTeleport = clientbound.EntityTeleport;
+    pub const PlayerListItem = clientbound.PlayerListItem;
+    pub const EntityEquipment = clientbound.EntityEquipment;
+    pub const SpawnPosition = clientbound.SpawnPosition;
+    pub const UpdateHealth = clientbound.UpdateHealth;
+    pub const Respawn = clientbound.Respawn;
+    pub const HeldItemChange = clientbound.HeldItemChange;
+    pub const Animation = clientbound.Animation;
+    pub const SpawnObject = clientbound.SpawnObject;
+    pub const SpawnMob = clientbound.SpawnMob;
 };

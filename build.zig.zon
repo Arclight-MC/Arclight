@@ -28,7 +28,7 @@
 
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.15.2",
 
     // This field is optional.
     // Each dependency must either provide a `url` and `hash`, or a `path`.
@@ -36,29 +36,20 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        .zstbi = .{
-            .url = "git+https://github.com/zig-gamedev/zstbi#a70604a93988ee553d0ae6a3871726270a6025d5",
-            .hash = "zstbi-0.11.0-dev-L0Ea_9WVBwAO8t0Qbr87vnCEf1QBcNQHbV-O_D0UWYqT",
-        },
-        .uuid = .{
-            .url = "git+https://github.com/Arclight-MC/zig-uuid#5d22e75f3f4addf523dc369fe8931038d87a62e2",
-            .hash = "uuid-0.1.0-Q7xwrzo1AACp6daVn2yytZaTU0IZVrgBffTaZL5rciMV",
-        },
         .toml = .{
-            .url = "git+https://github.com/sam701/zig-toml#e40c1046e16601e6ab22892012c397e0bacb7429",
-            .hash = "toml-0.3.0-bV14Bbt6AQBbak_x26I25WIDnqyGTET7Xqj1dxuLFNv4",
+            .url = "git+https://github.com/sam701/zig-toml#7e94b0a6fa1c846779304a1b8d7493091d793095",
+            .hash = "toml-0.3.0-bV14BVyFAQDTlzyP2Tw_GGoF7Q3QqP94nLAvB1djeE8S",
         },
         .args = .{
-            .url = "git+https://github.com/ikskuh/zig-args?ref=master#4c305bcb45fd3c4b74b7bf7f907cf3fc12f415a2",
-            .hash = "args-0.0.0-CiLiquDRAADuU_ueSmGquhHAuhDxxlfBokGj01ZdVYHt",
+            .url = "git+https://github.com/MasterQ32/zig-args#e060ac80c244e9675471b6d213b22ddc83cc8f98",
+            .hash = "args-0.0.0-CiLiqo_RAADz2TiHUzG5-0Mk7IZHR-h1SZgUrb_k4c7d",
         },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
-        // For example...
-        //"LICENSE",
-        //"README.md",
+        "LICENSE",
+        "README.md",
     },
 }

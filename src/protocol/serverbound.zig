@@ -51,21 +51,19 @@ pub const LoginStart = struct {
 };
 
 pub const EncryptionResponse = struct {
-    shared_secret_length: types.VarInt,
     shared_secret: []u8,
-    verify_token_length: types.VarInt,
     verify_token: []u8,
 
     pub fn read(reader: anytype, allocator: std.mem.Allocator) !EncryptionResponse {
-        const shared_secret_length = (try types.readVarInt(reader)).value;
-        const shared_secret = try allocator.alloc(u8, @as(usize, @intCast(shared_secret_length)));
+        const shared_secret_len = (try types.readVarInt(reader)).value;
+        const shared_secret = try allocator.alloc(u8, @as(usize, @intCast(shared_secret_len)));
         try reader.readNoEof(shared_secret);
 
-        const verify_token_length = (try types.readVarInt(reader)).value;
-        const verify_token = try allocator.alloc(u8, @as(usize, @intCast(verify_token_length)));
+        const verify_token_len = (try types.readVarInt(reader)).value;
+        const verify_token = try allocator.alloc(u8, @as(usize, @intCast(verify_token_len)));
         try reader.readNoEof(verify_token);
 
-        return .{ .shared_secret_length = shared_secret_length, .shared_secret = shared_secret, .verify_token_length = verify_token_length, .verify_token = verify_token };
+        return .{ .shared_secret = shared_secret, .verify_token = verify_token };
     }
 };
 
@@ -115,6 +113,7 @@ pub const UseEntity = struct {
 };
 
 pub const Player = struct {
+    pub const id: i32 = 0x03;
     on_ground: types.Boolean,
 
     pub fn read(reader: anytype) !Player {
@@ -124,6 +123,7 @@ pub const Player = struct {
 };
 
 pub const PlayerPosition = struct {
+    pub const id: i32 = 0x04;
     x: types.Double,
     feet_y: types.Double,
     z: types.Double,
@@ -139,6 +139,7 @@ pub const PlayerPosition = struct {
 };
 
 pub const PlayerLook = struct {
+    pub const id: i32 = 0x05;
     yaw: types.Float,
     pitch: types.Float,
     on_ground: types.Boolean,
@@ -152,6 +153,7 @@ pub const PlayerLook = struct {
 };
 
 pub const PlayerPositionAndLook = struct {
+    pub const id: i32 = 0x06;
     x: types.Double,
     feet_y: types.Double,
     z: types.Double,
@@ -171,6 +173,7 @@ pub const PlayerPositionAndLook = struct {
 };
 
 pub const PlayerDigging = struct {
+    pub const id: i32 = 0x07;
     status: types.Byte,
     location: types.Position,
     face: types.Byte,
@@ -184,6 +187,7 @@ pub const PlayerDigging = struct {
 };
 
 pub const PlayerBlockPlacement = struct {
+    pub const id: i32 = 0x08;
     location: types.Position,
     face: types.Byte,
     held_item_slot: types.Short,
@@ -203,6 +207,7 @@ pub const PlayerBlockPlacement = struct {
 };
 
 pub const HeldItemChange = struct {
+    pub const id: i32 = 0x09;
     slot: types.Short,
 
     pub fn read(reader: anytype) !HeldItemChange {
@@ -212,6 +217,7 @@ pub const HeldItemChange = struct {
 };
 
 pub const Animation = struct {
+    pub const id: i32 = 0x0A;
     pub fn read(reader: anytype) !Animation {
         _ = reader; // No fields
         return .{};
@@ -219,6 +225,7 @@ pub const Animation = struct {
 };
 
 pub const EntityAction = struct {
+    pub const id: i32 = 0x0B;
     entity_id: types.VarInt,
     action_id: types.VarInt,
     action_parameter: types.VarInt,
@@ -385,9 +392,9 @@ pub const PluginMessage = struct {
 
     pub fn read(reader: anytype, allocator: std.mem.Allocator) !PluginMessage {
         const channel = try types.readString(reader, allocator);
-        // The data length is not explicitly given, it's the rest of the packet
+        // The data length is not explicitly given, it's rest of packet
         // For now, we'll read until EOF or a reasonable limit.
-        // In a real implementation, you'd need the packet length from the outer VarInt.
+        // In a real implementation, you'd need to packet length from outer VarInt.
         var data_buffer = std.ArrayList(u8).init(allocator);
         while (reader.readByte()) |byte| {
             try data_buffer.append(byte);

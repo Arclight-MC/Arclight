@@ -7,6 +7,7 @@ const player = @import("../player.zig");
 const world = @import("../world/world.zig");
 const crypto = @import("../protocol/crypto.zig");
 const config = @import("../config.zig");
+const commands = @import("./commands.zig");
 const http = std.http;
 const json = std.json;
 
@@ -67,6 +68,7 @@ fn handlePacket(
     current_player: *player.Player,
     last_keep_alive_id: *i32,
     keep_alive_timer: *?std.time.Timer,
+    cmd_manager: *commands.CommandManager,
     allocator: std.mem.Allocator,
 ) !void {
     std.debug.print("Received packet\n", .{});
@@ -195,6 +197,17 @@ fn handlePacket(
                 serverbound.ChatMessage.id => {
                     const chat_packet = try serverbound.ChatMessage.read(buffer_reader, allocator);
                     std.debug.print("Chat from {s}: {s}\n", .{ current_player.*.name, chat_packet.message });
+
+                    if (chat_packet.message.len > 0 and chat_packet.message[0] == '/') {
+                        try cmd_manager.execute(
+                            chat_packet.message[1..],
+                            current_player.*.name,
+                            writer,
+                            allocator,
+                        );
+                    } else {
+                        std.debug.print("{s}: {s}\n", .{ current_player.*.name, chat_packet.message });
+                    }
                 },
                 serverbound.Player.id => {
                     const p = try serverbound.Player.read(buffer_reader);
@@ -238,6 +251,8 @@ pub fn handleClient(client: network.TcpClient, parent_allocator: std.mem.Allocat
     var g_client = client;
     defer g_client.deinit();
 
+    var cmd_manager = commands.CommandManager.init(allocator);
+
     var client_state: ClientState = undefined;
     var current_state: protocol.State = .Handshaking;
     var game_world: ?world.World = null;
@@ -252,7 +267,7 @@ pub fn handleClient(client: network.TcpClient, parent_allocator: std.mem.Allocat
 
         if (has_packet) {
             last_packet_time = keep_alive_timer.?.read();
-            handlePacket(&g_client, &client_state, &current_state, &game_world, &current_player, &last_keep_alive_id, &keep_alive_timer, allocator) catch |err| {
+            handlePacket(&g_client, &client_state, &current_state, &game_world, &current_player, &last_keep_alive_id, &keep_alive_timer, &cmd_manager, allocator) catch |err| {
                 if (err == error.EndOfStream) return;
                 std.log.err("Error handling packet: {s}", .{@errorName(err)});
                 return;

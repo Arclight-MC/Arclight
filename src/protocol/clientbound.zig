@@ -648,9 +648,9 @@ pub const ChatMessage = struct {
     position: i8,
 
     pub fn write(writer: anytype, packet: ChatMessage, allocator: std.mem.Allocator) !void {
-        var buffer = std.ArrayList(u8).init(allocator);
-        defer buffer.deinit();
-        const temp_writer = buffer.writer();
+        var buffer = try std.ArrayList(u8).initCapacity(allocator, 256);
+        defer buffer.deinit(allocator);
+        const temp_writer = buffer.writer(allocator);
 
         try types.writeVarInt(temp_writer, 0x02); // Packet ID
         try types.writeString(temp_writer, packet.json_data);

@@ -1,9 +1,10 @@
 const std = @import("std");
 const crypto = std.crypto;
 const aes = std.crypto.core.aes;
+const Sha1 = crypto.hash.Sha1;
+const Aes128 = aes.Aes128;
 
 pub const AES_BLOCK_SIZE = 16;
-const Aes128 = aes.Aes128;
 
 fn twosComplement(bytes: *[20]u8) void {
     var carry: bool = true;
@@ -19,7 +20,7 @@ fn twosComplement(bytes: *[20]u8) void {
 }
 
 pub fn getSha1Digest(allocator: std.mem.Allocator, server_id: []const u8, shared_secret: []const u8, public_key: []const u8) ![]u8 {
-    var sha1 = crypto.hash.Sha1.init(.{});
+    var sha1 = Sha1.init(.{});
     sha1.update(server_id);
     sha1.update(shared_secret);
     sha1.update(public_key);

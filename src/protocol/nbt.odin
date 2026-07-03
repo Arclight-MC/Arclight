@@ -262,23 +262,20 @@ _read_payload_long_array :: proc(r: ^Buffer_Reader, allocator: mem.Allocator) ->
 // --- Writer dispatch ---
 
 write_nbt :: proc(w: ^Buffer_Writer, tag: Nbt_Tag) -> Protocol_Send_Error {
-	assert(tag.type >= NBT_TAG_END && tag.type <= NBT_TAG_LONG_ARRAY)
-
-	if tag.type != NBT_TAG_END {
-		if err := bw_write_byte(w, tag.type); err != nil {
-			return err
-		}
-		assert(len(tag.name) <= int(max(u16)))
-		if err := bw_write_int(w, u16, u16(len(tag.name))); err != nil {
-			return err
-		}
-		if err := bw_write_bytes(w, transmute([]u8)tag.name); err != nil {
-			return err
-		}
-	}
-
 	if tag.type == NBT_TAG_END {
 		return bw_write_byte(w, 0x00)
+	}
+	assert(tag.type >= NBT_TAG_BYTE && tag.type <= NBT_TAG_LONG_ARRAY)
+
+	if err := bw_write_byte(w, tag.type); err != nil {
+		return err
+	}
+	assert(len(tag.name) <= int(max(u16)))
+	if err := bw_write_int(w, u16, u16(len(tag.name))); err != nil {
+		return err
+	}
+	if err := bw_write_bytes(w, transmute([]u8)tag.name); err != nil {
+		return err
 	}
 	return write_nbt_payload(w, tag)
 }
@@ -422,4 +419,123 @@ nbt_destroy :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) {
 		delete(v.tags, allocator)
 	}
 	tag.type = NBT_TAG_END
+}
+
+// --- Constructor helpers ---
+
+nbt_byte :: proc(name: string, val: i8) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_BYTE, name = name, payload = val}
+}
+
+nbt_short :: proc(name: string, val: i16) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_SHORT, name = name, payload = val}
+}
+
+nbt_int :: proc(name: string, val: i32) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_INT, name = name, payload = val}
+}
+
+nbt_long :: proc(name: string, val: i64) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_LONG, name = name, payload = val}
+}
+
+nbt_float :: proc(name: string, val: f32) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_FLOAT, name = name, payload = val}
+}
+
+nbt_double :: proc(name: string, val: f64) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_DOUBLE, name = name, payload = val}
+}
+
+nbt_string :: proc(name: string, val: string) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_STRING, name = name, payload = val}
+}
+
+nbt_byte_array :: proc(name: string, data: []u8) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_BYTE_ARRAY, name = name, payload = data}
+}
+
+nbt_int_array :: proc(name: string, data: []i32) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_INT_ARRAY, name = name, payload = data}
+}
+
+nbt_long_array :: proc(name: string, data: []i64) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_LONG_ARRAY, name = name, payload = data}
+}
+
+nbt_list :: proc(name: string, elem_type: u8, elements: []Nbt_Tag) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_LIST, name = name, payload = Nbt_List{element_type = elem_type, elements = elements}}
+}
+
+nbt_compound :: proc(name: string, tags: []Nbt_Tag) -> Nbt_Tag {
+	return Nbt_Tag{type = NBT_TAG_COMPOUND, name = name, payload = Nbt_Compound{tags = tags}}
+}
+
+// --- Clone ---
+
+nbt_clone :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) -> (Nbt_Tag, mem.Allocator_Error) {
+	if tag.type == NBT_TAG_END {
+		return Nbt_Tag{type = NBT_TAG_END}, nil
+	}
+
+	name := make([]u8, len(tag.name), allocator)
+	copy(name, tag.name)
+
+	payload, err := nbt_clone_payload(&tag.payload, allocator)
+	if err != nil {
+		delete(name, allocator)
+		return {}, err
+	}
+
+	return Nbt_Tag{type = tag.type, name = string(name), payload = payload}, nil
+}
+
+@(private)
+nbt_clone_payload :: proc(src: ^Nbt_Payload, allocator: mem.Allocator) -> (Nbt_Payload, mem.Allocator_Error) {
+	#partial switch v in src^ {
+	case i8, i16, i32, i64, f32, f64:
+		return v, nil
+	case string:
+		buf := make([]u8, len(v), allocator)
+		copy(buf, v)
+		return string(buf), nil
+	case []u8:
+		dst := make([]u8, len(v), allocator)
+		copy(dst, v)
+		return dst, nil
+	case []i32:
+		dst := make([]i32, len(v), allocator)
+		copy(dst, v)
+		return dst, nil
+	case []i64:
+		dst := make([]i64, len(v), allocator)
+		copy(dst, v)
+		return dst, nil
+	case Nbt_List:
+		elements := make([]Nbt_Tag, len(v.elements), allocator)
+		for i in 0..<len(v.elements) {
+			cloned, err := nbt_clone(&v.elements[i], allocator)
+			if err != nil {
+				for j in 0..<i { nbt_destroy(&elements[j], allocator) }
+				delete(elements, allocator)
+				return {}, err
+			}
+			elements[i] = cloned
+		}
+		return Nbt_List{element_type = v.element_type, elements = elements}, nil
+	case Nbt_Compound:
+		tags := make([]Nbt_Tag, len(v.tags), allocator)
+		for i in 0..<len(v.tags) {
+			cloned, err := nbt_clone(&v.tags[i], allocator)
+			if err != nil {
+				for j in 0..<i { nbt_destroy(&tags[j], allocator) }
+				delete(tags, allocator)
+				return {}, err
+			}
+			tags[i] = cloned
+		}
+		return Nbt_Compound{tags = tags}, nil
+	case:
+		return nil, .Out_Of_Memory
+	}
 }

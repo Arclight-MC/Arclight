@@ -3,9 +3,9 @@ package protocol
 import "core:fmt"
 import "core:mem"
 import "core:net"
+import "core:strings"
 import "core:sync"
 import "core:sync/chan"
-import "core:thread"
 import "core:time"
 
 import "../network"
@@ -28,10 +28,9 @@ Client_Task :: struct {
 	game_state:  ^Game_State,
 }
 
-// Entry point called by the thread pool for a new client. Unpacks Client_Task
-// and calls handle_client.
-client_task_proc :: proc(task: thread.Task) {
-	t := (^Client_Task)(task.data)
+// Entry point for a client thread. Unpacks Client_Task and calls handle_client.
+client_task_proc :: proc(data: rawptr) {
+	t := (^Client_Task)(data)
 	handle_client(&t.client, t.allocator, t.action_chan, t.game_state)
 }
 
@@ -92,8 +91,8 @@ handle_client :: proc(
 	current_player: player.Player
 
 	keep_alive_timer: time.Stopwatch
+	timeout_timer: time.Stopwatch
 	last_keep_alive_id: i32 = 0
-	last_packet_time: i64 = 0
 	have_timer := false
 
 	player_name: string
@@ -142,7 +141,7 @@ handle_client :: proc(
 		// regardless of how often packets arrive.
 		if current_state == .Play && have_timer && game_state.has_world {
 			elapsed := time.stopwatch_duration(keep_alive_timer)
-			now := i64(elapsed)
+			timeout_elapsed := time.stopwatch_duration(timeout_timer)
 
 			if elapsed >= time.Duration(Keep_Alive_Period_Ns) {
 				last_keep_alive_id += 1
@@ -157,11 +156,10 @@ handle_client :: proc(
 				time.stopwatch_start(&keep_alive_timer)
 			}
 
-			if last_packet_time != 0 && now - last_packet_time > Client_Timeout_Ns {
+			if i64(timeout_elapsed) > Client_Timeout_Ns {
 				fmt.println("Client timed out.")
 				return
 			}
-			last_packet_time = now
 
 			player.update_physics(&current_player, &game_state.world, 0.05)
 			tick := u64(time.stopwatch_duration(keep_alive_timer)) / u64(Position_Sync_Interval_Ns)
@@ -290,8 +288,8 @@ handle_client :: proc(
 					buffer_writer_destroy(&body_buf)
 				}
 				current_state = .Play
-				player_name = name
-				complete_login(client, allocator, game_state, &current_player, name)
+				player_name = strings.clone(name, parent_allocator)
+				complete_login(client, allocator, game_state, &current_player, player_name)
 				// Retry PlayerJoin several times; dropping a join is worse
 				// than dropping a chat message.
 				for i := 0; i < 100; i += 1 {
@@ -300,7 +298,7 @@ handle_client :: proc(
 						Action {
 							type = .PlayerJoin,
 							payload = Player_Join_Action {
-								username = name,
+								username = player_name,
 								reply_channel = &reply_chan,
 							},
 						},
@@ -310,6 +308,7 @@ handle_client :: proc(
 					time.sleep(time.Millisecond)
 				}
 				time.stopwatch_start(&keep_alive_timer)
+				time.stopwatch_start(&timeout_timer)
 				have_timer = true
 			case:
 				fmt.eprintfln("Unknown packet ID 0x%x in Login state.", packet.id)
@@ -355,10 +354,12 @@ handle_client :: proc(
 					}
 				} else {
 					// Echo to sender
+					safe_name := json_escape(current_player.name, allocator)
+					safe_msg := json_escape(msg, allocator)
 					json := fmt.aprintf(
 						`{"text":"<%s> %s"}`,
-						current_player.name,
-						msg,
+						safe_name,
+						safe_msg,
 						allocator = allocator,
 					)
 					echo_body: Buffer_Writer
@@ -369,9 +370,13 @@ handle_client :: proc(
 					buffer_writer_destroy(&echo_body)
 
 					// Send action to tick loop for broadcast to other players
+					chat_msg := strings.clone(msg, parent_allocator)
 					chat_action := Action {
 						type = .ChatMessage,
-						payload = Chat_Message_Action{sender = current_player.name, message = msg},
+						payload = Chat_Message_Action {
+							sender = current_player.name,
+							message = chat_msg,
+						},
 					}
 					_ = chan.try_send(action_chan^, chat_action)
 				}
@@ -684,4 +689,3 @@ process_server_message :: proc(
 	// Unknown message type, ignore
 	}
 }
-

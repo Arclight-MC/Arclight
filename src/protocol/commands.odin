@@ -8,8 +8,7 @@ import "core:sync/chan"
 
 // Shared state between the handler and command dispatch. Currently empty;
 // kept as a placeholder for future per-client command state.
-Command_State :: struct {
-}
+Command_State :: struct {}
 
 // Routes parsed command strings to the correct handler (help/say/time/list/me).
 // Created by command_manager_init, used by execute.
@@ -53,7 +52,8 @@ execute :: proc(
 	case "me":
 		return me_command(mgr, args, sender_name, w)
 	case:
-		json := fmt.tprintf("{\"text\":\"Unknown command: %s. Type /help for help.\"}", cmd_name)
+		safe_cmd := json_escape(cmd_name, mgr.allocator)
+		json := fmt.tprintf("{\"text\":\"Unknown command: %s. Type /help for help.\"}", safe_cmd)
 		return write_chat_message(w, Chat_Message_CB{json_data = json, position = 0})
 	}
 }
@@ -70,29 +70,36 @@ split_command :: proc(s: string) -> (string, string) {
 
 @(private)
 // Helper: sends a plain-text chat message (wrapped in JSON).
-send_chat :: proc(w: ^Buffer_Writer, text: string) -> Protocol_Send_Error {
-	json := fmt.tprintf("{\"text\":\"%s\"}", text)
+send_chat :: proc(
+	w: ^Buffer_Writer,
+	text: string,
+	allocator: mem.Allocator,
+) -> Protocol_Send_Error {
+	safe_text := json_escape(text, allocator)
+	json := fmt.tprintf("{\"text\":\"%s\"}", safe_text)
 	return write_chat_message(w, Chat_Message_CB{json_data = json, position = 0})
 }
 
 @(private)
 // /help - lists available commands.
-help_command :: proc(_: ^Command_Manager, w: ^Buffer_Writer) -> Protocol_Send_Error {
-	return send_chat(w, "Available commands: /help, /say, /time, /list, /me")
+help_command :: proc(mgr: ^Command_Manager, w: ^Buffer_Writer) -> Protocol_Send_Error {
+	return send_chat(w, "Available commands: /help, /say, /time, /list, /me", mgr.allocator)
 }
 
 @(private)
 // /say <message> - broadcasts as [sender] message.
 say_command :: proc(
-	_: ^Command_Manager,
+	mgr: ^Command_Manager,
 	args: string,
 	sender_name: string,
 	w: ^Buffer_Writer,
 ) -> Protocol_Send_Error {
 	if len(args) == 0 {
-		return send_chat(w, "Usage: /say <message>")
+		return send_chat(w, "Usage: /say <message>", mgr.allocator)
 	}
-	json := fmt.tprintf("{\"text\":\"[%s] %s\"}", sender_name, args)
+	safe_sender := json_escape(sender_name, mgr.allocator)
+	safe_args := json_escape(args, mgr.allocator)
+	json := fmt.tprintf("{\"text\":\"[%s] %s\"}", safe_sender, safe_args)
 	return write_chat_message(w, Chat_Message_CB{json_data = json, position = 0})
 }
 
@@ -108,16 +115,16 @@ time_command :: proc(
 ) -> Protocol_Send_Error {
 	idx := strings.index_byte(args, ' ')
 	if idx <= 0 || len(args) == 0 {
-		return send_chat(w, "Usage: /time <set|add> <value>")
+		return send_chat(w, "Usage: /time <set|add> <value>", mgr.allocator)
 	}
 	op_str := args[:idx]
 	value_str := args[idx + 1:]
 	if len(value_str) == 0 {
-		return send_chat(w, "Usage: /time <set|add> <value>")
+		return send_chat(w, "Usage: /time <set|add> <value>", mgr.allocator)
 	}
 	value, ok := strconv.parse_int(value_str, 10)
 	if !ok {
-		return send_chat(w, "Invalid number")
+		return send_chat(w, "Invalid number", mgr.allocator)
 	}
 	operation: Time_Op
 	switch op_str {
@@ -126,7 +133,7 @@ time_command :: proc(
 	case "add":
 		operation = .Add
 	case:
-		return send_chat(w, "Usage: /time <set|add> <value>")
+		return send_chat(w, "Usage: /time <set|add> <value>", mgr.allocator)
 	}
 
 	_ = chan.try_send(
@@ -137,7 +144,8 @@ time_command :: proc(
 		},
 	)
 
-	return send_chat(w, fmt.tprintf("Time %s to %d", op_str, value))
+	safe_msg := json_escape(fmt.tprintf("Time %s to %d", op_str, value), mgr.allocator)
+	return send_chat(w, safe_msg, mgr.allocator)
 }
 
 @(private)
@@ -148,20 +156,26 @@ list_command :: proc(
 	w: ^Buffer_Writer,
 	game_state: ^Game_State,
 ) -> Protocol_Send_Error {
-	return send_chat(w, fmt.tprintf("Players online: %d", game_state.player_count))
+	safe_msg := json_escape(
+		fmt.tprintf("Players online: %d", game_state.player_count),
+		mgr.allocator,
+	)
+	return send_chat(w, safe_msg, mgr.allocator)
 }
 
 @(private)
 // /me <action> - prints "* sender action" as an emote.
 me_command :: proc(
-	_: ^Command_Manager,
+	mgr: ^Command_Manager,
 	args: string,
 	sender_name: string,
 	w: ^Buffer_Writer,
 ) -> Protocol_Send_Error {
 	if len(args) == 0 {
-		return send_chat(w, "Usage: /me <action>")
+		return send_chat(w, "Usage: /me <action>", mgr.allocator)
 	}
-	json := fmt.tprintf("{\"text\":\"* %s %s\"}", sender_name, args)
+	safe_sender := json_escape(sender_name, mgr.allocator)
+	safe_args := json_escape(args, mgr.allocator)
+	json := fmt.tprintf("{\"text\":\"* %s %s\"}", safe_sender, safe_args)
 	return write_chat_message(w, Chat_Message_CB{json_data = json, position = 0})
 }

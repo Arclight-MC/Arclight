@@ -386,3 +386,40 @@ read_metadata :: proc(r: ^Buffer_Reader) -> Protocol_Recv_Error {
 write_metadata_terminator :: proc(w: ^Buffer_Writer) -> Protocol_Send_Error {
 	return bw_write_byte(w, 0x7F)
 }
+
+// json_escape escapes a string for safe inclusion in a JSON string value.
+// Escapes ", \, and control characters per RFC 8259.
+json_escape :: proc(s: string, allocator: mem.Allocator) -> string {
+	out: [dynamic]u8
+	out = make([dynamic]u8, 0, len(s) + 4, allocator)
+	hex_digits := "0123456789ABCDEF"
+	for i := 0; i < len(s); i += 1 {
+		c := s[i]
+		switch c {
+		case '"':
+			append(&out, '\\', '"')
+		case '\\':
+			append(&out, '\\', '\\')
+		case '\b':
+			append(&out, '\\', 'b')
+		case '\f':
+			append(&out, '\\', 'f')
+		case '\n':
+			append(&out, '\\', 'n')
+		case '\r':
+			append(&out, '\\', 'r')
+		case '\t':
+			append(&out, '\\', 't')
+
+			default: if c < 0x20 {
+				// Other control characters: unicode escape
+				append(&out, '\\', 'u', '0', '0')
+				append(&out, hex_digits[c >> 4])
+				append(&out, hex_digits[c & 0xF])
+			} else {
+				append(&out, c)
+			}
+		}
+	}
+	return string(out[:])
+}

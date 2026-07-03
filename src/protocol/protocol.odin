@@ -310,7 +310,9 @@ broadcast_time_update :: proc(game_state: ^Game_State) {
 // Sends a chat message from `sender` to all connected players. Each player
 // receives a JSON-formatted "<sender> message" on their reply channel.
 broadcast_chat :: proc(game_state: ^Game_State, sender: string, message: string) {
-	json_text := fmt.tprintf(`{"text":"<%s> %s"}`, sender, message)
+	safe_sender := json_escape(sender, game_state.allocator)
+	safe_message := json_escape(message, game_state.allocator)
+	json_text := fmt.tprintf(`{"text":"<%s> %s"}`, safe_sender, safe_message)
 	msg := Server_Message {
 		type = .Chat_Message,
 		payload = Chat_Message{json_data = json_text, position = 0},

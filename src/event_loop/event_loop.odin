@@ -16,12 +16,11 @@ TICK_DURATION_NS :: i64(50_000_000) // 50ms = 20 TPS
 ACTION_CHAN_CAP :: 1024
 
 // Main handler struct. Listens on TCP, creates Game_State, runs the tick
-// thread and thread pool. Init -> Run -> Destroy is the lifecycle.
+// thread. Init -> Run -> Destroy is the lifecycle.
 // tick_thread is saved so destroy can join it before freeing Game_State.
 Event_Loop :: struct {
 	allocator:   mem.Allocator,
 	server:      network.Tcp_Server,
-	thread_pool: thread.Pool,
 	cfg:         config.Config,
 	game_state:  ^protocol.Game_State,
 	action_chan: chan.Chan(protocol.Action),
@@ -68,19 +67,16 @@ init :: proc(allocator: mem.Allocator, cfg: config.Config) -> (Event_Loop, net.N
 	el := Event_Loop {
 		allocator   = allocator,
 		server      = server,
-		thread_pool = thread.Pool{},
 		cfg         = cfg,
 		game_state  = game_state_ptr,
 		action_chan = action_chan,
 	}
 
-	thread.pool_init(&el.thread_pool, allocator, max(1, cfg.thread_pool.max_threads))
-	thread.pool_start(&el.thread_pool)
 	return el, nil
 }
 
 // Shuts down the server: signals the tick loop to stop (closes action channel),
-// joins both the tick thread and the thread pool, then frees game state.
+// joins the tick thread, then frees game state.
 destroy :: proc(el: ^Event_Loop) {
 	// Close action channel - tick_loop checks chan.is_closed and exits
 	chan.close(&el.action_chan)
@@ -92,9 +88,6 @@ destroy :: proc(el: ^Event_Loop) {
 		thread.destroy(el.tick_thread)
 	}
 
-	// Now it's safe to join the pool and free shared state
-	thread.pool_join(&el.thread_pool)
-	thread.pool_destroy(&el.thread_pool)
 	network.tcp_server_destroy(&el.server)
 
 	if el.game_state != nil {
@@ -162,11 +155,14 @@ run :: proc(el: ^Event_Loop) -> net.Accept_Error {
 			action_chan = &el.action_chan,
 			game_state  = el.game_state,
 		}
-		thread.pool_add_task(
-			&el.thread_pool,
-			el.allocator,
-			protocol.client_task_proc,
+		// Spawn a dedicated OS thread per connection. self_cleanup=true
+		// means the thread resources are freed when the task proc returns.
+		_ = thread.create_and_start_with_data(
 			task_ptr_cast,
+			protocol.client_task_proc,
+			nil,
+			thread.Thread_Priority.Normal,
+			true,
 		)
 	}
 }

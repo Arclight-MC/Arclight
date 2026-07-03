@@ -5,15 +5,9 @@ import "core:encoding/varint"
 import "core:mem"
 import "core:net"
 
-// Protocol_Send_Error type-aliases net.TCP_Send_Error, so the protocol
-// layer need to import `net` directly
-
-// The network layer's Packet_Writer.write_* procedures return errors of
-// type `net.TCP_Send_Error`
 Protocol_Send_Error :: net.TCP_Send_Error
 Protocol_Recv_Error :: net.TCP_Recv_Error
 
-// Position encoding constants (Minecraft 1.8 format: 26 bits X, 12 bits Y, 26 bits Z, signed)
 POSITION_X_BITS    :: 26
 POSITION_Y_BITS    :: 12
 POSITION_Z_BITS    :: 26
@@ -28,23 +22,17 @@ POSITION_Z_MIN     :: -(1 << (POSITION_Z_BITS - 1))
 
 METADATA_END_MARKER :: 0x7F
 
-// to_u32 reinterprets i32 bits as u32 without a value conversion.
-// Needed because `cast(u32)i32_negative` is rejected by the compiler,
-// but `transmute` triggers -vet-cast.  A function call avoids that check.
 @(private) @(require_results)
 to_u32 :: #force_inline proc(v: i32) -> u32 {
 	w := v
 	return (^u32)(&w)^
 }
 
-// Buffer_Reader reads from a known-length byte slice.  Used when
-// decoding packet bodies that have already been framed off the wire.
 Buffer_Reader :: struct {
 	data: []u8,
 	pos:  int,
 }
 
-// Buffer_Writer builds a packet body into a growable byte buffer.
 Buffer_Writer :: struct {
 	buf:        [dynamic]u8,
 	allocator:  mem.Allocator,
@@ -151,8 +139,6 @@ bw_write_int :: proc(w: ^Buffer_Writer, $T: typeid, value: T) -> Protocol_Send_E
 }
 
 bw_write_varint :: proc(w: ^Buffer_Writer, value: i64) -> Protocol_Send_Error {
-	// Minecraft VarInt is signed 32-bit, encoded as unsigned LEB128
-	// Take the 32-bit two's complement representation then LEB128 encode
 	val32 := i32(value)
 	buf: [10]u8
 
@@ -161,7 +147,6 @@ bw_write_varint :: proc(w: ^Buffer_Writer, value: i64) -> Protocol_Send_Error {
 		return .Unknown
 	}
 
-	// Any valid i32 fits in 5 LEB128 bytes; more means a logic bug
 	assert(n <= 5)
 	append(&w.buf, ..buf[:n])
 	return nil
@@ -347,10 +332,7 @@ read_item_slot :: proc(r: ^Buffer_Reader, allocator: mem.Allocator) -> (Item_Slo
 	return Item_Slot{item_id = id, count = count, damage = damage, nbt = nbt}, nil
 }
 
-// TODO: wire into entity spawn/update dispatch
-@(private)
 read_metadata :: proc(r: ^Buffer_Reader) -> Protocol_Recv_Error {
-	// Metadata is opaque bytes terminated by METADATA_END_MARKER -- skip it
 	for {
 		b, err := br_read_byte(r)
 		if err != nil {
@@ -360,11 +342,45 @@ read_metadata :: proc(r: ^Buffer_Reader) -> Protocol_Recv_Error {
 			return nil
 		}
 		// TODO: The proper implementation would read the typed payload
-		_ = b // NOTE: metadata byte read and discarded
+		_ = b
 	}
 }
 
 @(private)
 write_metadata_terminator :: proc(w: ^Buffer_Writer) -> Protocol_Send_Error {
 	return bw_write_byte(w, METADATA_END_MARKER)
+}
+
+json_escape :: proc(s: string, allocator: mem.Allocator) -> string {
+	out: [dynamic]u8
+	out = make([dynamic]u8, 0, len(s) + 4, allocator)
+	hex_digits := "0123456789ABCDEF"
+	for i := 0; i < len(s); i += 1 {
+		c := s[i]
+		switch c {
+		case '"':
+			append(&out, '\\', '"')
+		case '\\':
+			append(&out, '\\', '\\')
+		case '\b':
+			append(&out, '\\', 'b')
+		case '\f':
+			append(&out, '\\', 'f')
+		case '\n':
+			append(&out, '\\', 'n')
+		case '\r':
+			append(&out, '\\', 'r')
+		case '\t':
+			append(&out, '\\', 't')
+
+			default: if c < 0x20 {
+				append(&out, '\\', 'u', '0', '0')
+				append(&out, hex_digits[c >> 4])
+				append(&out, hex_digits[c & 0xF])
+			} else {
+				append(&out, c)
+			}
+		}
+	}
+	return string(out[:])
 }

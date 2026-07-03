@@ -1,14 +1,17 @@
 package main
 
 import "core:fmt"
-import "core:os"
 import "core:mem"
+import "core:os"
 
 import "./src/config"
 import "./src/event_loop"
 
+// Path to the server configuration INI file.
 CONFIG_PATH :: "config.ini"
 
+// Entry point. Sets up memory tracking, loads server config from INI, then
+// runs the event loop (accept loop + tick loop + thread pool).
 main :: proc() {
 	track: mem.Tracking_Allocator
 	mem.tracking_allocator_init(&track, context.allocator)

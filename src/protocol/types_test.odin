@@ -297,18 +297,28 @@ test_string_round_trip :: proc(t: ^testing.T) {
 test_nbt_round_trip :: proc(t: ^testing.T) {
 	// Build a compound with every tag type, write it, read it back, compare.
 	// Uses core:testing for structured comparison.
-	nested := Nbt_Tag{
+	nested := Nbt_Tag {
 		type = NBT_TAG_COMPOUND,
 		name = "nested",
 		payload = Nbt_Compound{tags = make([]Nbt_Tag, 1, context.allocator)},
 	}
 	inner, iok := nested.payload.(Nbt_Compound)
 	assert(iok)
-	inner.tags[0] = Nbt_Tag{type = NBT_TAG_BYTE, name = "innerByte", payload = i8(77)}
+	inner.tags[0] = Nbt_Tag {
+		type    = NBT_TAG_BYTE,
+		name    = "innerByte",
+		payload = i8(77),
+	}
 
 	list_elements := make([]Nbt_Tag, 2, context.allocator)
-	list_elements[0] = Nbt_Tag{type = NBT_TAG_SHORT, payload = i16(100)}
-	list_elements[1] = Nbt_Tag{type = NBT_TAG_SHORT, payload = i16(-200)}
+	list_elements[0] = Nbt_Tag {
+		type    = NBT_TAG_SHORT,
+		payload = i16(100),
+	}
+	list_elements[1] = Nbt_Tag {
+		type    = NBT_TAG_SHORT,
+		payload = i16(-200),
+	}
 
 	byte_arr := make([]u8, 4, context.allocator)
 	byte_arr[0] = 10; byte_arr[1] = 20; byte_arr[2] = 30; byte_arr[3] = 255
@@ -319,25 +329,69 @@ test_nbt_round_trip :: proc(t: ^testing.T) {
 	long_arr := make([]i64, 2, context.allocator)
 	long_arr[0] = 9223372036854775807; long_arr[1] = -9223372036854775808
 
-	root := Nbt_Tag{
+	root := Nbt_Tag {
 		type = NBT_TAG_COMPOUND,
 		name = "root",
 		payload = Nbt_Compound{tags = make([]Nbt_Tag, 12, context.allocator)},
 	}
 	compound, ok := root.payload.(Nbt_Compound)
 	assert(ok)
-	compound.tags[0]  = Nbt_Tag{type = NBT_TAG_BYTE,       name = "byte",   payload = i8(42)}
-	compound.tags[1]  = Nbt_Tag{type = NBT_TAG_SHORT,      name = "short",  payload = i16(-12345)}
-	compound.tags[2]  = Nbt_Tag{type = NBT_TAG_INT,        name = "int",    payload = i32(0x7FFFFFFF)}
-	compound.tags[3]  = Nbt_Tag{type = NBT_TAG_LONG,       name = "long",   payload = i64(-1)}
-	compound.tags[4]  = Nbt_Tag{type = NBT_TAG_FLOAT,      name = "float",  payload = f32(3.14159)}
-	compound.tags[5]  = Nbt_Tag{type = NBT_TAG_DOUBLE,     name = "double", payload = f64(-2.71828)}
-	compound.tags[6]  = Nbt_Tag{type = NBT_TAG_STRING,     name = "str",    payload = string("Hello, NBT!")}
-	compound.tags[7]  = Nbt_Tag{type = NBT_TAG_BYTE_ARRAY, name = "ba",     payload = byte_arr}
-	compound.tags[8]  = Nbt_Tag{type = NBT_TAG_LIST,       name = "list",   payload = Nbt_List{element_type = NBT_TAG_SHORT, elements = list_elements}}
-	compound.tags[9]  = nested
-	compound.tags[10] = Nbt_Tag{type = NBT_TAG_INT_ARRAY,  name = "ia",     payload = int_arr}
-	compound.tags[11] = Nbt_Tag{type = NBT_TAG_LONG_ARRAY, name = "la",     payload = long_arr}
+	compound.tags[0] = Nbt_Tag {
+		type    = NBT_TAG_BYTE,
+		name    = "byte",
+		payload = i8(42),
+	}
+	compound.tags[1] = Nbt_Tag {
+		type    = NBT_TAG_SHORT,
+		name    = "short",
+		payload = i16(-12345),
+	}
+	compound.tags[2] = Nbt_Tag {
+		type    = NBT_TAG_INT,
+		name    = "int",
+		payload = i32(0x7FFFFFFF),
+	}
+	compound.tags[3] = Nbt_Tag {
+		type    = NBT_TAG_LONG,
+		name    = "long",
+		payload = i64(-1),
+	}
+	compound.tags[4] = Nbt_Tag {
+		type    = NBT_TAG_FLOAT,
+		name    = "float",
+		payload = f32(3.14159),
+	}
+	compound.tags[5] = Nbt_Tag {
+		type    = NBT_TAG_DOUBLE,
+		name    = "double",
+		payload = f64(-2.71828),
+	}
+	compound.tags[6] = Nbt_Tag {
+		type    = NBT_TAG_STRING,
+		name    = "str",
+		payload = string("Hello, NBT!"),
+	}
+	compound.tags[7] = Nbt_Tag {
+		type    = NBT_TAG_BYTE_ARRAY,
+		name    = "ba",
+		payload = byte_arr,
+	}
+	compound.tags[8] = Nbt_Tag {
+		type = NBT_TAG_LIST,
+		name = "list",
+		payload = Nbt_List{element_type = NBT_TAG_SHORT, elements = list_elements},
+	}
+	compound.tags[9] = nested
+	compound.tags[10] = Nbt_Tag {
+		type    = NBT_TAG_INT_ARRAY,
+		name    = "ia",
+		payload = int_arr,
+	}
+	compound.tags[11] = Nbt_Tag {
+		type    = NBT_TAG_LONG_ARRAY,
+		name    = "la",
+		payload = long_arr,
+	}
 
 	w: Buffer_Writer
 	buffer_writer_init(&w, context.allocator)
@@ -358,7 +412,7 @@ test_nbt_round_trip :: proc(t: ^testing.T) {
 	testing.expect(t, gok, "readback root is a compound")
 	testing.expect_value(t, len(gc.tags), 12)
 
-	for i in 0..<len(gc.tags) {
+	for i in 0 ..< len(gc.tags) {
 		testing.expect_value(t, gc.tags[i].type, compound.tags[i].type)
 		testing.expect_value(t, gc.tags[i].name, compound.tags[i].name)
 	}

@@ -8,21 +8,22 @@ import "core:net"
 Protocol_Send_Error :: net.TCP_Send_Error
 Protocol_Recv_Error :: net.TCP_Recv_Error
 
-POSITION_X_BITS    :: 26
-POSITION_Y_BITS    :: 12
-POSITION_Z_BITS    :: 26
-POSITION_X_SHIFT   :: POSITION_Y_BITS + POSITION_Z_BITS
-POSITION_Y_SHIFT   :: POSITION_Z_BITS
-POSITION_X_MAX     :: (1 << (POSITION_X_BITS - 1)) - 1
-POSITION_X_MIN     :: -(1 << (POSITION_X_BITS - 1))
-POSITION_Y_MAX     :: (1 << (POSITION_Y_BITS - 1)) - 1
-POSITION_Y_MIN     :: -(1 << (POSITION_Y_BITS - 1))
-POSITION_Z_MAX     :: (1 << (POSITION_Z_BITS - 1)) - 1
-POSITION_Z_MIN     :: -(1 << (POSITION_Z_BITS - 1))
+POSITION_X_BITS :: 26
+POSITION_Y_BITS :: 12
+POSITION_Z_BITS :: 26
+POSITION_X_SHIFT :: POSITION_Y_BITS + POSITION_Z_BITS
+POSITION_Y_SHIFT :: POSITION_Z_BITS
+POSITION_X_MAX :: (1 << (POSITION_X_BITS - 1)) - 1
+POSITION_X_MIN :: -(1 << (POSITION_X_BITS - 1))
+POSITION_Y_MAX :: (1 << (POSITION_Y_BITS - 1)) - 1
+POSITION_Y_MIN :: -(1 << (POSITION_Y_BITS - 1))
+POSITION_Z_MAX :: (1 << (POSITION_Z_BITS - 1)) - 1
+POSITION_Z_MIN :: -(1 << (POSITION_Z_BITS - 1))
 
 METADATA_END_MARKER :: 0x7F
 
-@(private) @(require_results)
+@(private)
+@(require_results)
 to_u32 :: #force_inline proc(v: i32) -> u32 {
 	w := v
 	return (^u32)(&w)^
@@ -34,13 +35,13 @@ Buffer_Reader :: struct {
 }
 
 Buffer_Writer :: struct {
-	buf:        [dynamic]u8,
-	allocator:  mem.Allocator,
+	buf:       [dynamic]u8,
+	allocator: mem.Allocator,
 }
 
 buffer_reader_init :: proc(r: ^Buffer_Reader, data: []u8) {
 	r.data = data
-	r.pos  = 0
+	r.pos = 0
 }
 
 buffer_writer_init :: proc(w: ^Buffer_Writer, allocator: mem.Allocator, initial_cap := 64) {
@@ -75,7 +76,7 @@ br_read_bytes :: proc(r: ^Buffer_Reader, dst: []u8) -> (int, Protocol_Recv_Error
 		return 0, .Connection_Closed
 	}
 	n := min(len(dst), len(r.data) - r.pos)
-	copy(dst, r.data[r.pos:r.pos+n])
+	copy(dst, r.data[r.pos:r.pos + n])
 	r.pos += n
 	return n, nil
 }
@@ -85,7 +86,7 @@ br_read_int :: proc(r: ^Buffer_Reader, $T: typeid) -> (T, Protocol_Recv_Error) {
 	if r.pos + size > len(r.data) {
 		return 0, .Connection_Closed
 	}
-	slice := r.data[r.pos:r.pos+size]
+	slice := r.data[r.pos:r.pos + size]
 	r.pos += size
 
 	when T == u16 || T == i16 {
@@ -160,9 +161,10 @@ bw_write_string :: proc(w: ^Buffer_Writer, s: string) -> Protocol_Send_Error {
 }
 
 bw_write_position :: proc(w: ^Buffer_Writer, x, y, z: i32) -> Protocol_Send_Error {
-	val := (u64(u32(x)) & ((1 << POSITION_X_BITS) - 1)) << POSITION_X_SHIFT |
-	       (u64(u32(y)) & ((1 << POSITION_Y_BITS) - 1)) << POSITION_Y_SHIFT |
-	       (u64(u32(z)) & ((1 << POSITION_Z_BITS) - 1))
+	val :=
+		(u64(u32(x)) & ((1 << POSITION_X_BITS) - 1)) << POSITION_X_SHIFT |
+		(u64(u32(y)) & ((1 << POSITION_Y_BITS) - 1)) << POSITION_Y_SHIFT |
+		(u64(u32(z)) & ((1 << POSITION_Z_BITS) - 1))
 	if err := bw_write_int(w, u64, val); err != nil {
 		return err
 	}
@@ -243,7 +245,7 @@ read_string :: proc(r: ^Buffer_Reader) -> (string, Protocol_Recv_Error) {
 		return "", .Connection_Closed
 	}
 	n := int(length)
-	s := string(r.data[r.pos:r.pos+n])
+	s := string(r.data[r.pos:r.pos + n])
 	r.pos += n
 	return s, nil
 }
@@ -317,18 +319,24 @@ write_item_slot :: proc(w: ^Buffer_Writer, slot: Item_Slot) -> Protocol_Send_Err
 	return write_nbt(w, slot.nbt)
 }
 
-read_item_slot :: proc(r: ^Buffer_Reader, allocator: mem.Allocator) -> (Item_Slot, Protocol_Recv_Error) {
+read_item_slot :: proc(
+	r: ^Buffer_Reader,
+	allocator: mem.Allocator,
+) -> (
+	Item_Slot,
+	Protocol_Recv_Error,
+) {
 	id, e0 := br_read_int(r, i16)
-	if e0 != nil { return {}, e0 }
+	if e0 != nil {return {}, e0}
 	if id == -1 {
 		return Item_Slot{item_id = -1}, nil
 	}
 	count, e1 := br_read_byte(r)
-	if e1 != nil { return {}, e1 }
+	if e1 != nil {return {}, e1}
 	damage, e2 := br_read_int(r, i16)
-	if e2 != nil { return {}, e2 }
+	if e2 != nil {return {}, e2}
 	nbt, e3 := read_nbt(r, allocator)
-	if e3 != nil { return {}, e3 }
+	if e3 != nil {return {}, e3}
 	return Item_Slot{item_id = id, count = count, damage = damage, nbt = nbt}, nil
 }
 

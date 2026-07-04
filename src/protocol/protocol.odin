@@ -331,4 +331,3 @@ pop :: proc(arr: ^$T/[dynamic]$E) -> E {
 	resize(arr, len(arr) - 1)
 	return val
 }
-

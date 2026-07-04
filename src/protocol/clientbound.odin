@@ -303,6 +303,7 @@ Spawn_Player :: struct {
 	metadata:     []Metadata_Entry,
 }
 
+// Writes a spawn-player packet (0x0C): entity ID, UUID, position, yaw, pitch, metadata.
 write_spawn_player :: proc(w: ^Buffer_Writer, p: Spawn_Player) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_SPAWN_PLAYER); err != nil {
 		return err
@@ -338,6 +339,7 @@ Destroy_Entities :: struct {
 	entity_ids: []i32,
 }
 
+// Writes a destroy-entities packet (0x13): list of entity IDs to remove.
 write_destroy_entities :: proc(w: ^Buffer_Writer, p: Destroy_Entities) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_DESTROY_ENTITIES); err != nil {
 		return err
@@ -363,6 +365,7 @@ Entity_Teleport :: struct {
 	on_ground: bool,
 }
 
+// Writes an entity teleport (0x18): entity ID, position, rotation, on-ground flag.
 write_entity_teleport :: proc(w: ^Buffer_Writer, p: Entity_Teleport) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_ENTITY_TELEPORT); err != nil {
 		return err
@@ -388,6 +391,8 @@ write_entity_teleport :: proc(w: ^Buffer_Writer, p: Entity_Teleport) -> Protocol
 	return bw_write_byte(w, p.on_ground ? 1 : 0)
 }
 
+// A single player property (e.g. texture) attached to a tab-list entry.
+// Used for online-mode skins; stubbed for offline mode.
 Player_List_Item_Property :: struct {
 	name:      string,
 	value:     string,
@@ -395,6 +400,8 @@ Player_List_Item_Property :: struct {
 	signature: Maybe(string),
 }
 
+// A single entry in the tab-list update. Fields vary by action type
+// (add player, update gamemode, update latency, update display name, remove).
 Player_List_Item_Player :: struct {
 	uuid:             [16]u8,
 	name:             string,
@@ -405,11 +412,16 @@ Player_List_Item_Player :: struct {
 	display_name:     Maybe(string),
 }
 
+// Tab-list update packet payload. Action (0-4) controls operation:
+// 0=add, 1=update gamemode, 2=update latency, 3=update display name, 4=remove.
+// Written by write_player_list_item.
 Player_List_Item :: struct {
 	action:  i32,
 	players: []Player_List_Item_Player,
 }
 
+// Writes a player-list-item packet (0x38): action (add/remove/update) + player
+// info. Used to populate the tab list.
 write_player_list_item :: proc(w: ^Buffer_Writer, p: Player_List_Item) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_PLAYER_LIST_ITEM); err != nil {
 		return err
@@ -510,6 +522,7 @@ Entity_Equipment :: struct {
 	item:      Item_Slot,
 }
 
+// Writes entity equipment (0x04): entity ID, slot, item.
 write_entity_equipment :: proc(w: ^Buffer_Writer, p: Entity_Equipment) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_ENTITY_EQUIPMENT); err != nil {
 		return err
@@ -527,6 +540,7 @@ Spawn_Position :: struct {
 	location: Position,
 }
 
+// Writes the spawn position (0x05): compass/world spawn coordinates.
 write_spawn_position :: proc(w: ^Buffer_Writer, p: Spawn_Position) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_SPAWN_POSITION); err != nil {
 		return err
@@ -540,6 +554,7 @@ Update_Health :: struct {
 	food_saturation: f32,
 }
 
+// Writes an update-health packet (0x06): health, food, saturation.
 write_update_health :: proc(w: ^Buffer_Writer, p: Update_Health) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_UPDATE_HEALTH); err != nil {
 		return err
@@ -560,6 +575,7 @@ Respawn :: struct {
 	level_type: string,
 }
 
+// Writes a respawn packet (0x07): dimension, difficulty, gamemode, level type.
 write_respawn :: proc(w: ^Buffer_Writer, p: Respawn) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_RESPAWN); err != nil {
 		return err
@@ -580,6 +596,7 @@ Held_Item_Change :: struct {
 	slot: i8,
 }
 
+// Writes a held-item-change packet (0x09): selected hotbar slot.
 write_held_item_change :: proc(w: ^Buffer_Writer, p: Held_Item_Change) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_HELD_ITEM_CHANGE); err != nil {
 		return err
@@ -592,6 +609,7 @@ Animation_CB :: struct {
 	animation_id: u8,
 }
 
+// Writes an animation packet (0x0B): entity ID + animation type.
 write_animation :: proc(w: ^Buffer_Writer, p: Animation_CB) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_ANIMATION); err != nil {
 		return err
@@ -616,6 +634,7 @@ Spawn_Object :: struct {
 	velocity_z: Maybe(i16),
 }
 
+// Writes a spawn-object packet (0x0E): entity ID, type, position, velocity.
 write_spawn_object :: proc(w: ^Buffer_Writer, p: Spawn_Object) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_SPAWN_OBJECT); err != nil {
 		return err
@@ -673,6 +692,7 @@ Spawn_Mob :: struct {
 	metadata:   []Metadata_Entry,
 }
 
+// Writes a spawn-mob packet (0x0F): entity ID, mob type, position, metadata.
 write_spawn_mob :: proc(w: ^Buffer_Writer, p: Spawn_Mob) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_SPAWN_MOB); err != nil {
 		return err
@@ -718,6 +738,7 @@ Time_Update :: struct {
 	time_of_day: i64,
 }
 
+// Writes a time-update packet (0x03): world age + time of day.
 write_time_update :: proc(w: ^Buffer_Writer, p: Time_Update) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_TIME_UPDATE); err != nil {
 		return err
@@ -733,6 +754,7 @@ Chat_Message_CB :: struct {
 	position:  i8,
 }
 
+// Writes a chat message (0x02): JSON data + position (chat/system/hotbar).
 write_chat_message :: proc(w: ^Buffer_Writer, p: Chat_Message_CB) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_CHAT_MESSAGE); err != nil {
 		return err

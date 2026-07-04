@@ -2,6 +2,9 @@ package protocol
 
 import "core:mem"
 
+// Named Binary Tag (NBT) implementation for Minecraft protocol 47 (1.8).
+// Only tag types 0-11 are supported: TAG_End through TAG_Int_Array.
+
 NBT_TAG_END :: 0
 NBT_TAG_BYTE :: 1
 NBT_TAG_SHORT :: 2
@@ -15,13 +18,17 @@ NBT_TAG_LIST :: 9
 NBT_TAG_COMPOUND :: 10
 NBT_TAG_INT_ARRAY :: 11
 
+// Maximum nesting depth for NBT compound/list structures. Prevents stack overflow
+// from malicious or malformed data.
 NBT_MAX_DEPTH :: 512
 
+// An ordered list of NBT tags, all sharing the same element type. Used for TAG_List.
 Nbt_List :: struct {
 	element_type: u8,
 	elements:     []Nbt_Tag,
 }
 
+// An unordered collection of named NBT tags. Used for TAG_Compound.
 Nbt_Compound :: struct {
 	tags: []Nbt_Tag,
 }
@@ -42,6 +49,11 @@ Nbt_Payload :: union {
 	[]i32,
 }
 
+// A single NBT tag: a type byte, an optional name, and a typed payload.
+// owns_name / owns_value control whether nbt_destroy frees heap-allocated
+// memory for the name and slice payloads respectively. Tags returned by
+// read_nbt and nbt_clone set both flags to true; constructor helpers leave
+// them at false (borrowed references).
 Nbt_Tag :: struct {
 	type:       u8,
 	name:       string,
@@ -50,8 +62,12 @@ Nbt_Tag :: struct {
 	owns_value: bool,
 }
 
-// --- Reader dispatch ---
+// === Reader dispatch ===
 
+// Reads a complete NBT tag from the wire, including the root name. Returns
+// a tree with owns_name/owns_value set to true. depth tracks recursion into
+// compound/list children (max NBT_MAX_DEPTH). The root is typically a
+// TAG_Compound.
 read_nbt :: proc(
 	r: ^Buffer_Reader,
 	allocator: mem.Allocator,
@@ -87,9 +103,18 @@ read_nbt :: proc(
 		return {}, e3
 	}
 
-	return Nbt_Tag{type = tag_type, name = string(name_buf), payload = payload, owns_name = true, owns_value = true}, nil
+	return Nbt_Tag {
+			type = tag_type,
+			name = string(name_buf),
+			payload = payload,
+			owns_name = true,
+			owns_value = true,
+		},
+		nil
 }
 
+// Reads a single NBT element inside a TAG_List, skipping the root name.
+// The element type is known from the list header. owns_value is set to true.
 read_nbt_in_list :: proc(
 	r: ^Buffer_Reader,
 	allocator: mem.Allocator,
@@ -108,7 +133,9 @@ read_nbt_in_list :: proc(
 	return Nbt_Tag{type = elem_type, payload = payload, owns_value = true}, nil
 }
 
-// --- Payload readers (one per tag type) ---
+// === Payload readers (one per tag type) ===
+// Dispatches to the correct reader based on the tag type byte.
+// Uses an if-else chain rather than a #partial switch on u8 (illegal in Odin).
 
 @(private)
 read_nbt_payload :: proc(
@@ -297,8 +324,9 @@ _read_payload_int_array :: proc(
 	return data, nil
 }
 
-// --- Writer dispatch ---
-
+// === Writer dispatch ===
+// Writes the type byte, name (u16 len + UTF-8), and then dispatches to the
+// correct payload writer. Writes a single 0x00 byte for TAG_End.
 write_nbt :: proc(w: ^Buffer_Writer, tag: Nbt_Tag) -> Protocol_Send_Error {
 	if tag.type == NBT_TAG_END {
 		return bw_write_byte(w, 0x00)
@@ -318,11 +346,15 @@ write_nbt :: proc(w: ^Buffer_Writer, tag: Nbt_Tag) -> Protocol_Send_Error {
 	return write_nbt_payload(w, tag)
 }
 
+// Writes an NBT tag payload without a name prefix. Used for elements inside
+// a TAG_List. Asserts tag.type is in the valid range (1..11).
 write_nbt_in_list :: proc(w: ^Buffer_Writer, tag: Nbt_Tag) -> Protocol_Send_Error {
 	assert(tag.type >= NBT_TAG_BYTE && tag.type <= NBT_TAG_INT_ARRAY)
 	return write_nbt_payload(w, tag)
 }
 
+// Dispatches to the correct payload writer via a #partial switch on the union.
+// Panics if the union variant is nil or unmatched.
 @(private)
 write_nbt_payload :: proc(w: ^Buffer_Writer, tag: Nbt_Tag) -> Protocol_Send_Error {
 	#partial switch v in tag.payload {
@@ -412,8 +444,12 @@ _write_payload_int_array :: proc(w: ^Buffer_Writer, data: []i32) -> Protocol_Sen
 	return nil
 }
 
-// --- Destroy ---
+// === Destroy ===
 
+// Frees all heap-allocated memory owned by this tag tree. Respects the
+// owns_name and owns_value flags so that constructor-produced tags
+// (which borrow their strings and slices) are not double-freed.
+// Resets tag.type to NBT_TAG_END after freeing.
 nbt_destroy :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) {
 	if tag.type == NBT_TAG_END {
 		return
@@ -448,7 +484,9 @@ nbt_destroy :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) {
 	tag.type = NBT_TAG_END
 }
 
-// --- Constructor helpers ---
+// === Constructor helpers ===
+// Build Nbt_Tag values with borrowed name/payload references (owns_name and
+// owns_value default to false). Do not pass to nbt_destroy unless cloned.
 
 nbt_byte :: proc(name: string, val: i8) -> Nbt_Tag {
 	return Nbt_Tag{type = NBT_TAG_BYTE, name = name, payload = val}
@@ -498,8 +536,11 @@ nbt_compound :: proc(name: string, tags: []Nbt_Tag) -> Nbt_Tag {
 	return Nbt_Tag{type = NBT_TAG_COMPOUND, name = name, payload = Nbt_Compound{tags = tags}}
 }
 
-// --- Clone ---
+// === Clone ===
 
+// Deep-copies an entire NBT tag tree. The returned tag has owns_name and
+// owns_value set to true, making it safe to pass to nbt_destroy.
+// Returns an Allocator_Error if any allocation fails (partial tree is freed).
 nbt_clone :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) -> (Nbt_Tag, mem.Allocator_Error) {
 	if tag.type == NBT_TAG_END {
 		return Nbt_Tag{type = NBT_TAG_END}, nil
@@ -514,7 +555,14 @@ nbt_clone :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) -> (Nbt_Tag, mem.Allo
 		return {}, err
 	}
 
-	return Nbt_Tag{type = tag.type, name = string(name), payload = payload, owns_name = true, owns_value = true}, nil
+	return Nbt_Tag {
+			type = tag.type,
+			name = string(name),
+			payload = payload,
+			owns_name = true,
+			owns_value = true,
+		},
+		nil
 }
 
 @(private)

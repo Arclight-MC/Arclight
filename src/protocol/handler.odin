@@ -743,7 +743,9 @@ read_varint_streaming :: proc(r: ^network.Packet_Reader) -> (i32, net.TCP_Recv_E
 	return value, nil
 }
 
-// TODO: replace inline send_framed callers with this helper
+// Convenience wrapper that allocates a Buffer_Writer, calls write_body to fill it,
+// sends the framed packet, then frees the buffer. Not currently wired into the
+// packet handler - kept for future refactoring.
 send_packet :: proc(
 	client: ^network.Tcp_Client,
 	allocator: mem.Allocator,

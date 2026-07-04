@@ -283,6 +283,7 @@ Click_Window :: struct {
 	clicked_item:  Item_Slot,
 }
 
+// Reads a window click action (0x0E): slot, button, mode, clicked item.
 read_click_window :: proc(
 	r: ^Buffer_Reader,
 	allocator: mem.Allocator,
@@ -335,6 +336,7 @@ Creative_Inventory_Action :: struct {
 	clicked_item: Item_Slot,
 }
 
+// Reads a creative-mode inventory change (0x10): slot, clicked_item.
 read_creative_inventory_action :: proc(
 	r: ^Buffer_Reader,
 	allocator: mem.Allocator,

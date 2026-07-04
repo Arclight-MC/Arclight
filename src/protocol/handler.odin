@@ -497,7 +497,7 @@ handle_client :: proc(
 					creative.slot,
 					creative.clicked_item.item_id,
 				)
-		case USE_ENTITY:
+			case USE_ENTITY:
 				ue, err := read_use_entity(&packet.body)
 				if err != nil {
 					fmt.eprintfln("use_entity read error: %v", err)
@@ -536,14 +536,24 @@ handle_client :: proc(
 					fmt.eprintfln("entity_action read error: %v", err)
 					break
 				}
-				fmt.printfln("Entity action: eid=%d action=%d param=%d", ea.entity_id, ea.action_id, ea.action_parameter)
+				fmt.printfln(
+					"Entity action: eid=%d action=%d param=%d",
+					ea.entity_id,
+					ea.action_id,
+					ea.action_parameter,
+				)
 			case STEER_VEHICLE:
 				sv, err := read_steer_vehicle(&packet.body)
 				if err != nil {
 					fmt.eprintfln("steer_vehicle read error: %v", err)
 					break
 				}
-				fmt.printfln("Steer vehicle: sideways=%.2f forward=%.2f flags=%d", sv.sideways, sv.forward, sv.flags)
+				fmt.printfln(
+					"Steer vehicle: sideways=%.2f forward=%.2f flags=%d",
+					sv.sideways,
+					sv.forward,
+					sv.flags,
+				)
 			case CLOSE_WINDOW:
 				win, err := read_close_window(&packet.body)
 				if err != nil {
@@ -557,7 +567,12 @@ handle_client :: proc(
 					fmt.eprintfln("confirm_transaction read error: %v", err)
 					break
 				}
-				fmt.printfln("Confirm transaction: win=%d action=%d accepted=%t", ct.window_id, ct.action_number, ct.accepted)
+				fmt.printfln(
+					"Confirm transaction: win=%d action=%d accepted=%t",
+					ct.window_id,
+					ct.action_number,
+					ct.accepted,
+				)
 			case ENCHANT_ITEM:
 				slot, err := read_enchant_item(&packet.body)
 				if err != nil {
@@ -584,7 +599,12 @@ handle_client :: proc(
 					fmt.eprintfln("player_abilities read error: %v", err)
 					break
 				}
-				fmt.printfln("Player abilities: flags=%d fly_speed=%.2f walk_speed=%.2f", pa.flags, pa.fly_speed, pa.walk_speed)
+				fmt.printfln(
+					"Player abilities: flags=%d fly_speed=%.2f walk_speed=%.2f",
+					pa.flags,
+					pa.fly_speed,
+					pa.walk_speed,
+				)
 			case TAB_COMPLETE:
 				tc, err := read_tab_complete(&packet.body)
 				if err != nil {
@@ -598,7 +618,12 @@ handle_client :: proc(
 					fmt.eprintfln("client_settings read error: %v", err)
 					break
 				}
-				fmt.printfln("Client settings: locale=%s view_dist=%d chat_mode=%d", cs.locale, cs.view_distance, cs.chat_mode)
+				fmt.printfln(
+					"Client settings: locale=%s view_dist=%d chat_mode=%d",
+					cs.locale,
+					cs.view_distance,
+					cs.chat_mode,
+				)
 			case CLIENT_STATUS:
 				status, err := read_client_status(&packet.body)
 				if err != nil {

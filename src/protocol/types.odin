@@ -372,7 +372,10 @@ read_metadata_entries :: proc(
 
 		typ := header >> 5
 		idx := header & 0x1F
-		entry := Metadata_Entry{index = idx, type = typ}
+		entry := Metadata_Entry {
+			index = idx,
+			type  = typ,
+		}
 
 		switch typ {
 		case 0:

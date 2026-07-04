@@ -326,13 +326,10 @@ test_nbt_round_trip :: proc(t: ^testing.T) {
 	int_arr := make([]i32, 3, context.allocator)
 	int_arr[0] = -1000; int_arr[1] = 0; int_arr[2] = 1000
 
-	long_arr := make([]i64, 2, context.allocator)
-	long_arr[0] = 9223372036854775807; long_arr[1] = -9223372036854775808
-
 	root := Nbt_Tag {
 		type = NBT_TAG_COMPOUND,
 		name = "root",
-		payload = Nbt_Compound{tags = make([]Nbt_Tag, 12, context.allocator)},
+		payload = Nbt_Compound{tags = make([]Nbt_Tag, 11, context.allocator)},
 	}
 	compound, ok := root.payload.(Nbt_Compound)
 	assert(ok)
@@ -387,11 +384,6 @@ test_nbt_round_trip :: proc(t: ^testing.T) {
 		name    = "ia",
 		payload = int_arr,
 	}
-	compound.tags[11] = Nbt_Tag {
-		type    = NBT_TAG_LONG_ARRAY,
-		name    = "la",
-		payload = long_arr,
-	}
 
 	w: Buffer_Writer
 	buffer_writer_init(&w, context.allocator)
@@ -410,7 +402,7 @@ test_nbt_round_trip :: proc(t: ^testing.T) {
 
 	gc, gok := got.payload.(Nbt_Compound)
 	testing.expect(t, gok, "readback root is a compound")
-	testing.expect_value(t, len(gc.tags), 12)
+	testing.expect_value(t, len(gc.tags), 11)
 
 	for i in 0 ..< len(gc.tags) {
 		testing.expect_value(t, gc.tags[i].type, compound.tags[i].type)
@@ -475,18 +467,11 @@ test_nbt_round_trip :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(ia), 3)
 	testing.expect_value(t, ia[0], i32(-1000))
 
-	la, laok := gc.tags[11].payload.([]i64)
-	testing.expect(t, laok, "tag[11] is []i64")
-	testing.expect_value(t, len(la), 2)
-	testing.expect_value(t, la[0], i64(9223372036854775807))
-	testing.expect_value(t, la[1], i64(-9223372036854775808))
-
 	buffer_writer_destroy(&w)
 	delete(compound.tags, context.allocator)
 	delete(list_elements, context.allocator)
 	delete(byte_arr, context.allocator)
 	delete(int_arr, context.allocator)
-	delete(long_arr, context.allocator)
 	nc2, nc2ok := nested.payload.(Nbt_Compound)
 	if nc2ok {
 		delete(nc2.tags, context.allocator)

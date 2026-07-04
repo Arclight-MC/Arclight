@@ -14,7 +14,6 @@ NBT_TAG_STRING :: 8
 NBT_TAG_LIST :: 9
 NBT_TAG_COMPOUND :: 10
 NBT_TAG_INT_ARRAY :: 11
-NBT_TAG_LONG_ARRAY :: 12
 
 NBT_MAX_DEPTH :: 512
 
@@ -27,8 +26,8 @@ Nbt_Compound :: struct {
 	tags: []Nbt_Tag,
 }
 
-// Tagged union of every NBT payload variant.
-// Matches NBT_TAG_BYTE..NBT_TAG_LONG_ARRAY (1..12).
+// Tagged union of every NBT payload variant available in protocol 47 (1.8).
+// Matches NBT_TAG_BYTE..NBT_TAG_INT_ARRAY (1..11).
 Nbt_Payload :: union {
 	i8,
 	i16,
@@ -41,7 +40,6 @@ Nbt_Payload :: union {
 	Nbt_List,
 	Nbt_Compound,
 	[]i32,
-	[]i64,
 }
 
 Nbt_Tag :: struct {
@@ -67,7 +65,7 @@ read_nbt :: proc(
 	if tag_type == NBT_TAG_END {
 		return Nbt_Tag{type = NBT_TAG_END}, nil
 	}
-	if tag_type > NBT_TAG_LONG_ARRAY {
+	if tag_type > NBT_TAG_INT_ARRAY {
 		return {}, .Invalid_Argument
 	}
 
@@ -100,7 +98,7 @@ read_nbt_in_list :: proc(
 	Protocol_Recv_Error,
 ) {
 	assert(depth <= NBT_MAX_DEPTH)
-	assert(elem_type >= NBT_TAG_BYTE && elem_type <= NBT_TAG_LONG_ARRAY)
+	assert(elem_type >= NBT_TAG_BYTE && elem_type <= NBT_TAG_INT_ARRAY)
 
 	payload, e := read_nbt_payload(r, allocator, elem_type, depth)
 	if e != nil {return {}, e}
@@ -131,7 +129,6 @@ read_nbt_payload :: proc(
 	if tag_type == NBT_TAG_LIST {return _read_payload_list(r, allocator, depth)}
 	if tag_type == NBT_TAG_COMPOUND {return _read_payload_compound(r, allocator, depth)}
 	if tag_type == NBT_TAG_INT_ARRAY {return _read_payload_int_array(r, allocator)}
-	if tag_type == NBT_TAG_LONG_ARRAY {return _read_payload_long_array(r, allocator)}
 	return {}, .Invalid_Argument
 }
 
@@ -227,7 +224,7 @@ _read_payload_list :: proc(
 ) {
 	elem_type, e0 := br_read_byte(r)
 	if e0 != nil {return {}, e0}
-	if elem_type > NBT_TAG_LONG_ARRAY {return {}, .Invalid_Argument}
+	if elem_type > NBT_TAG_INT_ARRAY {return {}, .Invalid_Argument}
 
 	count, e1 := read_int(r)
 	if e1 != nil {return {}, e1}
@@ -298,35 +295,13 @@ _read_payload_int_array :: proc(
 	return data, nil
 }
 
-@(private)
-_read_payload_long_array :: proc(
-	r: ^Buffer_Reader,
-	allocator: mem.Allocator,
-) -> (
-	Nbt_Payload,
-	Protocol_Recv_Error,
-) {
-	arr_len, e0 := read_int(r)
-	if e0 != nil {return {}, e0}
-	if arr_len < 0 {return {}, .Invalid_Argument}
-
-	err: Protocol_Recv_Error
-	data := make([]i64, arr_len, allocator)
-	defer if err != nil {delete(data, allocator)}
-	for i in 0 ..< arr_len {
-		data[i], err = read_long(r)
-		if err != nil {return {}, err}
-	}
-	return data, nil
-}
-
 // --- Writer dispatch ---
 
 write_nbt :: proc(w: ^Buffer_Writer, tag: Nbt_Tag) -> Protocol_Send_Error {
 	if tag.type == NBT_TAG_END {
 		return bw_write_byte(w, 0x00)
 	}
-	assert(tag.type >= NBT_TAG_BYTE && tag.type <= NBT_TAG_LONG_ARRAY)
+	assert(tag.type >= NBT_TAG_BYTE && tag.type <= NBT_TAG_INT_ARRAY)
 
 	if err := bw_write_byte(w, tag.type); err != nil {
 		return err
@@ -342,7 +317,7 @@ write_nbt :: proc(w: ^Buffer_Writer, tag: Nbt_Tag) -> Protocol_Send_Error {
 }
 
 write_nbt_in_list :: proc(w: ^Buffer_Writer, tag: Nbt_Tag) -> Protocol_Send_Error {
-	assert(tag.type >= NBT_TAG_BYTE && tag.type <= NBT_TAG_LONG_ARRAY)
+	assert(tag.type >= NBT_TAG_BYTE && tag.type <= NBT_TAG_INT_ARRAY)
 	return write_nbt_payload(w, tag)
 }
 
@@ -371,8 +346,6 @@ write_nbt_payload :: proc(w: ^Buffer_Writer, tag: Nbt_Tag) -> Protocol_Send_Erro
 		return _write_payload_compound(w, v)
 	case []i32:
 		return _write_payload_int_array(w, v)
-	case []i64:
-		return _write_payload_long_array(w, v)
 	case:
 		return .Invalid_Argument
 	}
@@ -399,7 +372,7 @@ _write_payload_string :: proc(w: ^Buffer_Writer, str: string) -> Protocol_Send_E
 
 @(private)
 _write_payload_list :: proc(w: ^Buffer_Writer, list: Nbt_List) -> Protocol_Send_Error {
-	assert(list.element_type >= NBT_TAG_BYTE && list.element_type <= NBT_TAG_LONG_ARRAY)
+	assert(list.element_type >= NBT_TAG_BYTE && list.element_type <= NBT_TAG_INT_ARRAY)
 	if err := bw_write_byte(w, list.element_type); err != nil {
 		return err
 	}
@@ -437,19 +410,6 @@ _write_payload_int_array :: proc(w: ^Buffer_Writer, data: []i32) -> Protocol_Sen
 	return nil
 }
 
-@(private)
-_write_payload_long_array :: proc(w: ^Buffer_Writer, data: []i64) -> Protocol_Send_Error {
-	if err := bw_write_int(w, i32, i32(len(data))); err != nil {
-		return err
-	}
-	for i in 0 ..< len(data) {
-		if err := bw_write_int(w, i64, data[i]); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // --- Destroy ---
 
 nbt_destroy :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) {
@@ -465,8 +425,6 @@ nbt_destroy :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) {
 	case []u8:
 		delete(v, allocator)
 	case []i32:
-		delete(v, allocator)
-	case []i64:
 		delete(v, allocator)
 	case Nbt_List:
 		for &elem in v.elements {
@@ -518,10 +476,6 @@ nbt_byte_array :: proc(name: string, data: []u8) -> Nbt_Tag {
 
 nbt_int_array :: proc(name: string, data: []i32) -> Nbt_Tag {
 	return Nbt_Tag{type = NBT_TAG_INT_ARRAY, name = name, payload = data}
-}
-
-nbt_long_array :: proc(name: string, data: []i64) -> Nbt_Tag {
-	return Nbt_Tag{type = NBT_TAG_LONG_ARRAY, name = name, payload = data}
 }
 
 nbt_list :: proc(name: string, elem_type: u8, elements: []Nbt_Tag) -> Nbt_Tag {
@@ -576,10 +530,6 @@ nbt_clone_payload :: proc(
 		return dst, nil
 	case []i32:
 		dst := make([]i32, len(v), allocator)
-		copy(dst, v)
-		return dst, nil
-	case []i64:
-		dst := make([]i64, len(v), allocator)
 		copy(dst, v)
 		return dst, nil
 	case Nbt_List:

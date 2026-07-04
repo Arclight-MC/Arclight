@@ -331,6 +331,3 @@ pop :: proc(arr: ^$T/[dynamic]$E) -> E {
 	resize(arr, len(arr) - 1)
 	return val
 }
-
-// World generation seed
-WORLD_SEED :: 12345

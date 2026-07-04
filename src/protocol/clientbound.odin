@@ -1,7 +1,17 @@
 package protocol
 
+// Status packet IDs
 CB_STATUS_RESPONSE :: 0x00
 CB_PONG :: 0x01
+
+// Login packet IDs
+CB_LOGIN_DISCONNECT :: 0x00
+CB_ENCRYPTION_REQUEST :: 0x01
+CB_LOGIN_SUCCESS :: 0x02
+CB_SET_COMPRESSION :: 0x03
+
+// Play packet IDs
+CB_KEEP_ALIVE :: 0x00
 CB_CHAT_MESSAGE :: 0x02
 CB_TIME_UPDATE :: 0x03
 CB_ENTITY_EQUIPMENT :: 0x04
@@ -17,16 +27,17 @@ CB_SPAWN_MOB :: 0x0F
 CB_DESTROY_ENTITIES :: 0x13
 CB_ENTITY_TELEPORT :: 0x18
 CB_CHUNK_DATA :: 0x21
+CB_SET_SLOT :: 0x2F
+CB_WINDOW_ITEMS :: 0x30
+CB_UPDATE_TILE_ENTITY :: 0x3A
 CB_PLAYER_LIST_ITEM :: 0x38
-CB_KEEP_ALIVE :: 0x00
 
-// --- Status / Login clientbound packet writers ---
+// --- Status & Login writers ---
 
 Status_Response :: struct {
 	json_response: string,
 }
 
-// Writes the server list ping response (0x00): JSON description.
 write_status_response :: proc(w: ^Buffer_Writer, p: Status_Response) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_STATUS_RESPONSE); err != nil {
 		return err
@@ -38,7 +49,6 @@ Pong :: struct {
 	payload: i64,
 }
 
-// Writes a pong response (0x01), echoing back the ping payload.
 write_pong :: proc(w: ^Buffer_Writer, p: Pong) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_PONG); err != nil {
 		return err
@@ -50,9 +60,8 @@ Login_Disconnect :: struct {
 	reason: string,
 }
 
-// Writes a login disconnect reason (0x00): JSON reason string.
 write_login_disconnect :: proc(w: ^Buffer_Writer, p: Login_Disconnect) -> Protocol_Send_Error {
-	if err := bw_write_varint(w, 0x00); err != nil {
+	if err := bw_write_varint(w, CB_LOGIN_DISCONNECT); err != nil {
 		return err
 	}
 	return bw_write_string(w, p.reason)
@@ -64,9 +73,8 @@ Encryption_Request :: struct {
 	verify_token: []u8,
 }
 
-// Writes an encryption request (0x01): server ID, public key, verify token.
 write_encryption_request :: proc(w: ^Buffer_Writer, p: Encryption_Request) -> Protocol_Send_Error {
-	if err := bw_write_varint(w, 0x01); err != nil {
+	if err := bw_write_varint(w, CB_ENCRYPTION_REQUEST); err != nil {
 		return err
 	}
 	if err := bw_write_string(w, p.server_id); err != nil {
@@ -89,9 +97,8 @@ Login_Success :: struct {
 	username: string,
 }
 
-// Writes a login success (0x02): UUID + username.
 write_login_success :: proc(w: ^Buffer_Writer, p: Login_Success) -> Protocol_Send_Error {
-	if err := bw_write_varint(w, 0x02); err != nil {
+	if err := bw_write_varint(w, CB_LOGIN_SUCCESS); err != nil {
 		return err
 	}
 	if err := bw_write_string(w, p.uuid); err != nil {
@@ -104,19 +111,15 @@ Set_Compression :: struct {
 	threshold: i32,
 }
 
-// Writes a set-compression threshold (0x03). Not currently used (compression
-// is disabled).
 write_set_compression :: proc(w: ^Buffer_Writer, p: Set_Compression) -> Protocol_Send_Error {
-	if err := bw_write_varint(w, 0x03); err != nil {
+	if err := bw_write_varint(w, CB_SET_COMPRESSION); err != nil {
 		return err
 	}
 	return bw_write_varint(w, i64(p.threshold))
 }
 
-// --- Play-state clientbound packet writers ---
+// --- Play writers ---
 
-// Login/Play transition: tells the client its entity ID, world parameters,
-// and max players. Sent once by complete_login.
 Join_Game :: struct {
 	entity_id:          i32,
 	gamemode:           u8,
@@ -127,8 +130,6 @@ Join_Game :: struct {
 	reduced_debug_info: bool,
 }
 
-// Writes a join-game packet (0x01): entity ID, gamemode, dimension, difficulty,
-// max players, level type. Sent when the player enters the Play state.
 write_join_game :: proc(w: ^Buffer_Writer, p: Join_Game) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, 0x01); err != nil {
 		return err
@@ -154,9 +155,6 @@ write_join_game :: proc(w: ^Buffer_Writer, p: Join_Game) -> Protocol_Send_Error 
 	return bw_write_byte(w, p.reduced_debug_info ? 1 : 0)
 }
 
-// Absolute position + look sync sent to the client. The flags byte controls
-// whether each component is relative (bitmask: 0x01=x, 0x02=y, 0x04=z,
-// 0x08=yaw, 0x10=pitch).
 Player_Position_And_Look_CB :: struct {
 	x:     f64,
 	y:     f64,
@@ -166,8 +164,6 @@ Player_Position_And_Look_CB :: struct {
 	flags: u8,
 }
 
-// Writes a position/look sync (0x08): absolute position, yaw, pitch, flags.
-// Tells the client where the server thinks it is.
 write_player_position_and_look :: proc(
 	w: ^Buffer_Writer,
 	p: Player_Position_And_Look_CB,
@@ -197,7 +193,6 @@ Keep_Alive :: struct {
 	keep_alive_id: i32,
 }
 
-// Writes a keep-alive request (0x00). The client must echo this ID back.
 write_keep_alive :: proc(w: ^Buffer_Writer, p: Keep_Alive) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, 0x00); err != nil {
 		return err
@@ -205,9 +200,6 @@ write_keep_alive :: proc(w: ^Buffer_Writer, p: Keep_Alive) -> Protocol_Send_Erro
 	return bw_write_varint(w, i64(p.keep_alive_id))
 }
 
-// Serialised chunk sent to the client: position, ground-up flag, bitmask of
-// which 16-block sections are included, and the raw block/light/biome data.
-// Built by world.build_chunk_packet_data.
 Chunk_Data :: struct {
 	chunk_x:              i32,
 	chunk_z:              i32,
@@ -216,7 +208,6 @@ Chunk_Data :: struct {
 	data:                 []u8,
 }
 
-// Writes a chunk data packet (0x21): chunk X/Z, ground-up flag, bitmask, block data.
 write_chunk_data :: proc(w: ^Buffer_Writer, p: Chunk_Data) -> Protocol_Send_Error {
 	if err := bw_write_varint(w, CB_CHUNK_DATA); err != nil {
 		return err
@@ -239,6 +230,67 @@ write_chunk_data :: proc(w: ^Buffer_Writer, p: Chunk_Data) -> Protocol_Send_Erro
 	return bw_write_bytes(w, p.data)
 }
 
+Set_Slot :: struct {
+	window_id: u8,
+	slot:      i16,
+	item:      Item_Slot,
+}
+
+write_set_slot :: proc(w: ^Buffer_Writer, p: Set_Slot) -> Protocol_Send_Error {
+	if err := bw_write_varint(w, CB_SET_SLOT); err != nil {
+		return err
+	}
+	if err := bw_write_byte(w, p.window_id); err != nil {
+		return err
+	}
+	if err := bw_write_int(w, i16, p.slot); err != nil {
+		return err
+	}
+	return write_item_slot(w, p.item)
+}
+
+Window_Items :: struct {
+	window_id: u8,
+	items:     []Item_Slot,
+}
+
+write_window_items :: proc(w: ^Buffer_Writer, p: Window_Items) -> Protocol_Send_Error {
+	if err := bw_write_varint(w, CB_WINDOW_ITEMS); err != nil {
+		return err
+	}
+	if err := bw_write_byte(w, p.window_id); err != nil {
+		return err
+	}
+	if err := bw_write_int(w, i16, i16(len(p.items))); err != nil {
+		return err
+	}
+	for item in p.items {
+		if err := write_item_slot(w, item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+Update_Tile_Entity :: struct {
+	location: Position,
+	action:   u8,
+	nbt:      Nbt_Tag,
+}
+
+write_update_tile_entity :: proc(w: ^Buffer_Writer, p: Update_Tile_Entity) -> Protocol_Send_Error {
+	if err := bw_write_varint(w, CB_UPDATE_TILE_ENTITY); err != nil {
+		return err
+	}
+	if err := bw_write_position(w, p.location.x, p.location.y, p.location.z); err != nil {
+		return err
+	}
+	if err := bw_write_byte(w, p.action); err != nil {
+		return err
+	}
+	return write_nbt(w, p.nbt)
+}
+
 Spawn_Player :: struct {
 	entity_id:    i32,
 	player_uuid:  [16]u8,
@@ -248,7 +300,7 @@ Spawn_Player :: struct {
 	yaw:          u8,
 	pitch:        u8,
 	current_item: i16,
-	metadata:     []u8,
+	metadata:     []Metadata_Entry,
 }
 
 // Writes a spawn-player packet (0x0C): entity ID, UUID, position, yaw, pitch, metadata.
@@ -280,7 +332,7 @@ write_spawn_player :: proc(w: ^Buffer_Writer, p: Spawn_Player) -> Protocol_Send_
 	if err := bw_write_int(w, i16, p.current_item); err != nil {
 		return err
 	}
-	return bw_write_bytes(w, p.metadata)
+	return write_metadata_entries(w, p.metadata)
 }
 
 Destroy_Entities :: struct {
@@ -637,7 +689,7 @@ Spawn_Mob :: struct {
 	velocity_x: i16,
 	velocity_y: i16,
 	velocity_z: i16,
-	metadata:   []u8,
+	metadata:   []Metadata_Entry,
 }
 
 // Writes a spawn-mob packet (0x0F): entity ID, mob type, position, metadata.
@@ -678,7 +730,7 @@ write_spawn_mob :: proc(w: ^Buffer_Writer, p: Spawn_Mob) -> Protocol_Send_Error 
 	if err := bw_write_int(w, i16, p.velocity_z); err != nil {
 		return err
 	}
-	return bw_write_bytes(w, p.metadata)
+	return write_metadata_entries(w, p.metadata)
 }
 
 Time_Update :: struct {

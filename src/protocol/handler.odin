@@ -14,9 +14,40 @@ import "../world"
 
 DEFAULT_ONLINE_MODE :: false
 
-// Per-client data passed to the thread pool.
-//
-// Bridges the accept loop (event_loop.run) and the pool worker (handle_client).
+// Physics tick interval (seconds)
+PHYSICS_DT :: 0.05
+
+// World generation seed
+WORLD_SEED :: 12345
+
+// Chunk loading radius around spawn
+CHUNK_RADIUS :: 2
+
+// Maximum players for Join Game packet
+JOIN_GAME_MAX_PLAYERS :: 100
+
+// Game mode constants
+GAMEMODE_SURVIVAL :: 0
+GAMEMODE_CREATIVE :: 1
+GAMEMODE_ADVENTURE :: 2
+GAMEMODE_SPECTATOR :: 3
+
+// Dimension constants
+DIMENSION_NETHER :: -1
+DIMENSION_OVERWORLD :: 0
+DIMENSION_END :: 1
+
+// Difficulty constants
+DIFFICULTY_PEACEFUL :: 0
+DIFFICULTY_EASY :: 1
+DIFFICULTY_NORMAL :: 2
+DIFFICULTY_HARD :: 3
+
+// Offline-mode UUID (same for all players)
+OFFLINE_UUID :: "4566e69f-c907-48ee-8d71-d7ba5aa200d0"
+
+// Per-client data passed to the thread pool. Bridges the accept loop
+// (event_loop.run) and the pool worker (handle_client).
 Client_Task :: struct {
 	// The client's TCP connection
 	client:      network.Tcp_Client,
@@ -279,10 +310,7 @@ handle_client :: proc(
 					buffer_writer_init(&body_buf, allocator)
 					write_login_success(
 						&body_buf,
-						Login_Success {
-							uuid = "4566e69f-c907-48ee-8d71-d7ba5aa200d0",
-							username = name,
-						},
+						Login_Success{uuid = OFFLINE_UUID, username = name},
 					)
 					send_framed(client, body_buf.buf[:])
 					buffer_writer_destroy(&body_buf)
@@ -381,52 +409,257 @@ handle_client :: proc(
 					_ = chan.try_send(action_chan^, chat_action)
 				}
 			case PLAYER:
-				if on_ground, err := read_boolean(&packet.body); err == nil {
-					current_player.on_ground = on_ground
+				on_ground, err := read_boolean(&packet.body)
+				if err != nil {
+					fmt.eprintfln("player read error: %v", err)
+					return
 				}
+				current_player.on_ground = on_ground
 			case PLAYER_POSITION:
 				pos, err := read_player_position(&packet.body)
-				if err == nil {
-					prev_x := current_player.x
-					prev_y := current_player.y
-					prev_z := current_player.z
-					current_player.x = pos.x
-					current_player.y = pos.feet_y
-					current_player.z = pos.z
-					current_player.on_ground = pos.on_ground
-					current_player.velocity_x = pos.x - prev_x
-					current_player.velocity_y = pos.feet_y - prev_y
-					current_player.velocity_z = pos.z - prev_z
+				if err != nil {
+					fmt.eprintfln("player_position read error: %v", err)
+					return
 				}
+				prev_x := current_player.x
+				prev_y := current_player.y
+				prev_z := current_player.z
+				current_player.x = pos.x
+				current_player.y = pos.feet_y
+				current_player.z = pos.z
+				current_player.on_ground = pos.on_ground
+				current_player.velocity_x = pos.x - prev_x
+				current_player.velocity_y = pos.feet_y - prev_y
+				current_player.velocity_z = pos.z - prev_z
 			case PLAYER_LOOK:
 				lk, err := read_player_look(&packet.body)
-				if err == nil {
-					current_player.yaw = lk.yaw
-					current_player.pitch = lk.pitch
-					current_player.on_ground = lk.on_ground
+				if err != nil {
+					fmt.eprintfln("player_look read error: %v", err)
+					return
 				}
+				current_player.yaw = lk.yaw
+				current_player.pitch = lk.pitch
+				current_player.on_ground = lk.on_ground
 			case PLAYER_POSITION_AND_LOOK:
 				pal, err := read_player_position_and_look(&packet.body)
-				if err == nil {
-					prev_x := current_player.x
-					prev_y := current_player.y
-					prev_z := current_player.z
-					current_player.x = pal.x
-					current_player.y = pal.feet_y
-					current_player.z = pal.z
-					current_player.yaw = pal.yaw
-					current_player.pitch = pal.pitch
-					current_player.on_ground = pal.on_ground
-					current_player.velocity_x = pal.x - prev_x
-					current_player.velocity_y = pal.feet_y - prev_y
-					current_player.velocity_z = pal.z - prev_z
+				if err != nil {
+					fmt.eprintfln("player_position_and_look read error: %v", err)
+					return
 				}
+				prev_x := current_player.x
+				prev_y := current_player.y
+				prev_z := current_player.z
+				current_player.x = pal.x
+				current_player.y = pal.feet_y
+				current_player.z = pal.z
+				current_player.yaw = pal.yaw
+				current_player.pitch = pal.pitch
+				current_player.on_ground = pal.on_ground
+				current_player.velocity_x = pal.x - prev_x
+				current_player.velocity_y = pal.feet_y - prev_y
+				current_player.velocity_z = pal.z - prev_z
+			case PLAYER_BLOCK_PLACEMENT:
+				block_place, err := read_player_block_placement(&packet.body, allocator)
+				if err != nil {
+					fmt.eprintfln("player_block_placement read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Block place: pos=(%d,%d,%d) face=%d item_id=%d",
+					block_place.location.x,
+					block_place.location.y,
+					block_place.location.z,
+					block_place.face,
+					block_place.clicked_item.item_id,
+				)
+			case CLICK_WINDOW:
+				click, err := read_click_window(&packet.body, allocator)
+				if err != nil {
+					fmt.eprintfln("click_window read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Click window: win=%d slot=%d btn=%d mode=%d item_id=%d",
+					click.window_id,
+					click.slot,
+					click.button,
+					click.mode,
+					click.clicked_item.item_id,
+				)
+			case CREATIVE_INVENTORY_ACTION:
+				creative, err := read_creative_inventory_action(&packet.body, allocator)
+				if err != nil {
+					fmt.eprintfln("creative_inventory_action read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Creative inventory action: slot=%d item_id=%d",
+					creative.slot,
+					creative.clicked_item.item_id,
+				)
+			case USE_ENTITY:
+				ue, err := read_use_entity(&packet.body)
+				if err != nil {
+					fmt.eprintfln("use_entity read error: %v", err)
+					break
+				}
+				fmt.printfln("Use entity: target=%d type=%d", ue.target, ue.type)
+			case PLAYER_DIGGING:
+				dig, err := read_player_digging(&packet.body)
+				if err != nil {
+					fmt.eprintfln("player_digging read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Digging: status=%d pos=(%d,%d,%d) face=%d",
+					dig.status,
+					dig.location.x,
+					dig.location.y,
+					dig.location.z,
+					dig.face,
+				)
+			case HELD_ITEM_CHANGE:
+				slot, err := read_held_item_change(&packet.body)
+				if err != nil {
+					fmt.eprintfln("held_item_change read error: %v", err)
+					break
+				}
+				fmt.printfln("Held item change: slot=%d", slot)
+			case ANIMATION:
+				err := read_animation(&packet.body)
+				if err != nil {
+					fmt.eprintfln("animation read error: %v", err)
+				}
+			case ENTITY_ACTION:
+				ea, err := read_entity_action(&packet.body)
+				if err != nil {
+					fmt.eprintfln("entity_action read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Entity action: eid=%d action=%d param=%d",
+					ea.entity_id,
+					ea.action_id,
+					ea.action_parameter,
+				)
+			case STEER_VEHICLE:
+				sv, err := read_steer_vehicle(&packet.body)
+				if err != nil {
+					fmt.eprintfln("steer_vehicle read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Steer vehicle: sideways=%.2f forward=%.2f flags=%d",
+					sv.sideways,
+					sv.forward,
+					sv.flags,
+				)
+			case CLOSE_WINDOW:
+				win, err := read_close_window(&packet.body)
+				if err != nil {
+					fmt.eprintfln("close_window read error: %v", err)
+					break
+				}
+				fmt.printfln("Close window: win=%d", win)
+			case CONFIRM_TRANSACTION:
+				ct, err := read_confirm_transaction(&packet.body)
+				if err != nil {
+					fmt.eprintfln("confirm_transaction read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Confirm transaction: win=%d action=%d accepted=%t",
+					ct.window_id,
+					ct.action_number,
+					ct.accepted,
+				)
+			case ENCHANT_ITEM:
+				slot, err := read_enchant_item(&packet.body)
+				if err != nil {
+					fmt.eprintfln("enchant_item read error: %v", err)
+					break
+				}
+				fmt.printfln("Enchant item: slot=%d", slot)
+			case UPDATE_SIGN:
+				sign, err := read_update_sign(&packet.body)
+				if err != nil {
+					fmt.eprintfln("update_sign read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Sign update: pos=(%d,%d,%d) text=\"%s\"",
+					sign.location.x,
+					sign.location.y,
+					sign.location.z,
+					sign.text1,
+				)
+			case PLAYER_ABILITIES:
+				pa, err := read_player_abilities(&packet.body)
+				if err != nil {
+					fmt.eprintfln("player_abilities read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Player abilities: flags=%d fly_speed=%.2f walk_speed=%.2f",
+					pa.flags,
+					pa.fly_speed,
+					pa.walk_speed,
+				)
+			case TAB_COMPLETE:
+				tc, err := read_tab_complete(&packet.body)
+				if err != nil {
+					fmt.eprintfln("tab_complete read error: %v", err)
+					break
+				}
+				fmt.printfln("Tab complete: text=\"%s\" pos=%d", tc.text, tc.position)
+			case CLIENT_SETTINGS:
+				cs, err := read_client_settings(&packet.body)
+				if err != nil {
+					fmt.eprintfln("client_settings read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Client settings: locale=%s view_dist=%d chat_mode=%d",
+					cs.locale,
+					cs.view_distance,
+					cs.chat_mode,
+				)
+			case CLIENT_STATUS:
+				status, err := read_client_status(&packet.body)
+				if err != nil {
+					fmt.eprintfln("client_status read error: %v", err)
+					break
+				}
+				fmt.printfln("Client status: action=%d", status)
+			case PLUGIN_MESSAGE:
+				pm, err := read_plugin_message(&packet.body, allocator)
+				if err != nil {
+					fmt.eprintfln("plugin_message read error: %v", err)
+					break
+				}
+				fmt.printfln("Plugin message: channel=%s len=%d", pm.channel, len(pm.data))
+			case SPECTATE:
+				sp, err := read_spectate(&packet.body)
+				if err != nil {
+					fmt.eprintfln("spectate read error: %v", err)
+					break
+				}
+				_ = sp
+				fmt.println("Spectate packet received")
+			case RESOURCE_PACK_STATUS:
+				rp, err := read_resource_pack_status(&packet.body)
+				if err != nil {
+					fmt.eprintfln("resource_pack_status read error: %v", err)
+					break
+				}
+				fmt.printfln("Resource pack status: hash=%s result=%d", rp.hash, rp.result)
 			case:
 				fmt.eprintfln("Unhandled Play packet ID: 0x%x", packet.id)
 			}
 		}
 	}
 }
+
 // --- helpers -------------------------------------------------------------
 
 // A framed packet: packet ID + body bytes.
@@ -577,7 +810,7 @@ complete_login :: proc(
 	// pool workers (the tick loop also reads has_world).
 	sync.mutex_lock(&game_state.world_mutex)
 	if !game_state.has_world {
-		game_state.world = world.world_init(game_state.allocator, 12345)
+		game_state.world = world.world_init(game_state.allocator, WORLD_SEED)
 		game_state.has_world = true
 	}
 	sync.mutex_unlock(&game_state.world_mutex)
@@ -592,21 +825,21 @@ complete_login :: proc(
 	write_join_game(
 		&body_buf,
 		Join_Game {
-			entity_id          = 1,
-			gamemode           = 1, // Creative
-			dimension          = 0, // Overworld
-			difficulty         = 0, // Peaceful
-			max_players        = 100,
-			level_type         = "default",
+			entity_id = 1,
+			gamemode = GAMEMODE_CREATIVE,
+			dimension = DIMENSION_OVERWORLD,
+			difficulty = DIFFICULTY_PEACEFUL,
+			max_players = JOIN_GAME_MAX_PLAYERS,
+			level_type = "default",
 			reduced_debug_info = false,
 		},
 	)
 	send_framed(client, body_buf.buf[:])
 	buffer_writer_destroy(&body_buf)
 
-	// Send chunks in a 5x5 area around origin.
-	for i in -2 ..= 2 {
-		for j in -2 ..= 2 {
+	// Send chunks in a (2*CHUNK_RADIUS+1)x(2*CHUNK_RADIUS+1) area around origin.
+	for i in -CHUNK_RADIUS ..= CHUNK_RADIUS {
+		for j in -CHUNK_RADIUS ..= CHUNK_RADIUS {
 			chunk := world.world_get_chunk(&game_state.world, i32(i), i32(j))
 			chunk_data, bitmask, _ := world.build_chunk_packet_data(allocator, chunk)
 			body_buf2: Buffer_Writer

@@ -458,6 +458,45 @@ handle_client :: proc(
 				current_player.velocity_x = pal.x - prev_x
 				current_player.velocity_y = pal.feet_y - prev_y
 				current_player.velocity_z = pal.z - prev_z
+			case PLAYER_BLOCK_PLACEMENT:
+				block_place, err := read_player_block_placement(&packet.body, allocator)
+				if err != nil {
+					fmt.eprintfln("player_block_placement read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Block place: pos=(%d,%d,%d) face=%d item_id=%d",
+					block_place.location.x,
+					block_place.location.y,
+					block_place.location.z,
+					block_place.face,
+					block_place.clicked_item.item_id,
+				)
+			case CLICK_WINDOW:
+				click, err := read_click_window(&packet.body, allocator)
+				if err != nil {
+					fmt.eprintfln("click_window read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Click window: win=%d slot=%d btn=%d mode=%d item_id=%d",
+					click.window_id,
+					click.slot,
+					click.button,
+					click.mode,
+					click.clicked_item.item_id,
+				)
+			case CREATIVE_INVENTORY_ACTION:
+				creative, err := read_creative_inventory_action(&packet.body, allocator)
+				if err != nil {
+					fmt.eprintfln("creative_inventory_action read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Creative inventory action: slot=%d item_id=%d",
+					creative.slot,
+					creative.clicked_item.item_id,
+				)
 			case:
 				fmt.eprintfln("Unhandled Play packet ID: 0x%x", packet.id)
 			}

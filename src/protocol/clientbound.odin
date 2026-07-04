@@ -27,6 +27,9 @@ CB_SPAWN_MOB :: 0x0F
 CB_DESTROY_ENTITIES :: 0x13
 CB_ENTITY_TELEPORT :: 0x18
 CB_CHUNK_DATA :: 0x21
+CB_SET_SLOT :: 0x2F
+CB_WINDOW_ITEMS :: 0x30
+CB_UPDATE_TILE_ENTITY :: 0x3A
 CB_PLAYER_LIST_ITEM :: 0x38
 
 // --- Status & Login writers ---
@@ -225,6 +228,67 @@ write_chunk_data :: proc(w: ^Buffer_Writer, p: Chunk_Data) -> Protocol_Send_Erro
 		return err
 	}
 	return bw_write_bytes(w, p.data)
+}
+
+Set_Slot :: struct {
+	window_id: u8,
+	slot:      i16,
+	item:      Item_Slot,
+}
+
+write_set_slot :: proc(w: ^Buffer_Writer, p: Set_Slot) -> Protocol_Send_Error {
+	if err := bw_write_varint(w, CB_SET_SLOT); err != nil {
+		return err
+	}
+	if err := bw_write_byte(w, p.window_id); err != nil {
+		return err
+	}
+	if err := bw_write_int(w, i16, p.slot); err != nil {
+		return err
+	}
+	return write_item_slot(w, p.item)
+}
+
+Window_Items :: struct {
+	window_id: u8,
+	items:     []Item_Slot,
+}
+
+write_window_items :: proc(w: ^Buffer_Writer, p: Window_Items) -> Protocol_Send_Error {
+	if err := bw_write_varint(w, CB_WINDOW_ITEMS); err != nil {
+		return err
+	}
+	if err := bw_write_byte(w, p.window_id); err != nil {
+		return err
+	}
+	if err := bw_write_int(w, i16, i16(len(p.items))); err != nil {
+		return err
+	}
+	for item in p.items {
+		if err := write_item_slot(w, item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+Update_Tile_Entity :: struct {
+	location: Position,
+	action:   u8,
+	nbt:      Nbt_Tag,
+}
+
+write_update_tile_entity :: proc(w: ^Buffer_Writer, p: Update_Tile_Entity) -> Protocol_Send_Error {
+	if err := bw_write_varint(w, CB_UPDATE_TILE_ENTITY); err != nil {
+		return err
+	}
+	if err := bw_write_position(w, p.location.x, p.location.y, p.location.z); err != nil {
+		return err
+	}
+	if err := bw_write_byte(w, p.action); err != nil {
+		return err
+	}
+	return write_nbt(w, p.nbt)
 }
 
 Spawn_Player :: struct {

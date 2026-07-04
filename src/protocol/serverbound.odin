@@ -184,15 +184,17 @@ read_player_digging :: proc(r: ^Buffer_Reader) -> (Player_Digging, Protocol_Recv
 Player_Block_Placement :: struct {
 	location:          Position,
 	face:              i8,
-	held_item_slot:    i16,
+	clicked_item:      Item_Slot,
 	cursor_position_x: u8,
 	cursor_position_y: u8,
 	cursor_position_z: u8,
 }
 
 // Reads a block-place action (0x08): position, face, held item, cursor coords.
+// held_item is a full Item_Slot (id, count, damage, NBT).
 read_player_block_placement :: proc(
 	r: ^Buffer_Reader,
+	allocator: mem.Allocator,
 ) -> (
 	Player_Block_Placement,
 	Protocol_Recv_Error,
@@ -201,7 +203,7 @@ read_player_block_placement :: proc(
 	if e0 != nil {return {}, e0}
 	face, e1 := read_byte(r)
 	if e1 != nil {return {}, e1}
-	held, e2 := read_short(r)
+	item, e2 := read_item_slot(r, allocator)
 	if e2 != nil {return {}, e2}
 	cx, e3 := read_ubyte(r)
 	if e3 != nil {return {}, e3}
@@ -212,7 +214,7 @@ read_player_block_placement :: proc(
 	return Player_Block_Placement {
 			location = location,
 			face = face,
-			held_item_slot = held,
+			clicked_item = item,
 			cursor_position_x = cx,
 			cursor_position_y = cy,
 			cursor_position_z = cz,

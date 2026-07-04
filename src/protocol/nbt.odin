@@ -43,9 +43,11 @@ Nbt_Payload :: union {
 }
 
 Nbt_Tag :: struct {
-	type:    u8,
-	name:    string,
-	payload: Nbt_Payload,
+	type:       u8,
+	name:       string,
+	payload:    Nbt_Payload,
+	owns_name:  bool,
+	owns_value: bool,
 }
 
 // --- Reader dispatch ---
@@ -85,7 +87,7 @@ read_nbt :: proc(
 		return {}, e3
 	}
 
-	return Nbt_Tag{type = tag_type, name = string(name_buf), payload = payload}, nil
+	return Nbt_Tag{type = tag_type, name = string(name_buf), payload = payload, owns_name = true, owns_value = true}, nil
 }
 
 read_nbt_in_list :: proc(
@@ -103,7 +105,7 @@ read_nbt_in_list :: proc(
 	payload, e := read_nbt_payload(r, allocator, elem_type, depth)
 	if e != nil {return {}, e}
 
-	return Nbt_Tag{type = elem_type, payload = payload}, nil
+	return Nbt_Tag{type = elem_type, payload = payload, owns_value = true}, nil
 }
 
 // --- Payload readers (one per tag type) ---
@@ -416,26 +418,32 @@ nbt_destroy :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) {
 	if tag.type == NBT_TAG_END {
 		return
 	}
-	delete(tag.name, allocator)
+	if tag.owns_name {
+		delete(tag.name, allocator)
+	}
 
 	#partial switch v in tag.payload {
 	case i8, i16, i32, i64, f32, f64:
 	case string:
-		delete(v, allocator)
+		if tag.owns_value {delete(v, allocator)}
 	case []u8:
-		delete(v, allocator)
+		if tag.owns_value {delete(v, allocator)}
 	case []i32:
-		delete(v, allocator)
+		if tag.owns_value {delete(v, allocator)}
 	case Nbt_List:
-		for &elem in v.elements {
-			nbt_destroy(&elem, allocator)
+		if tag.owns_value {
+			for &elem in v.elements {
+				nbt_destroy(&elem, allocator)
+			}
+			delete(v.elements, allocator)
 		}
-		delete(v.elements, allocator)
 	case Nbt_Compound:
-		for &t in v.tags {
-			nbt_destroy(&t, allocator)
+		if tag.owns_value {
+			for &t in v.tags {
+				nbt_destroy(&t, allocator)
+			}
+			delete(v.tags, allocator)
 		}
-		delete(v.tags, allocator)
 	}
 	tag.type = NBT_TAG_END
 }
@@ -506,7 +514,7 @@ nbt_clone :: proc(tag: ^Nbt_Tag, allocator: mem.Allocator) -> (Nbt_Tag, mem.Allo
 		return {}, err
 	}
 
-	return Nbt_Tag{type = tag.type, name = string(name), payload = payload}, nil
+	return Nbt_Tag{type = tag.type, name = string(name), payload = payload, owns_name = true, owns_value = true}, nil
 }
 
 @(private)

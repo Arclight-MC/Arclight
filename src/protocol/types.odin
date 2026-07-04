@@ -340,22 +340,124 @@ read_item_slot :: proc(
 	return Item_Slot{item_id = id, count = count, damage = damage, nbt = nbt}, nil
 }
 
-read_metadata :: proc(r: ^Buffer_Reader) -> Protocol_Recv_Error {
-	for {
-		b, err := br_read_byte(r)
-		if err != nil {
-			return err
-		}
-		if b == METADATA_END_MARKER {
-			return nil
-		}
-		// TODO: The proper implementation would read the typed payload
-		_ = b
-	}
+Metadata_Entry :: struct {
+	index: u8,
+	type:  u8,
+	value: union {
+		i8,
+		i16,
+		i32,
+		f32,
+		string,
+		Item_Slot,
+		[3]i32,
+		[3]f32,
+	},
 }
 
-@(private)
-write_metadata_terminator :: proc(w: ^Buffer_Writer) -> Protocol_Send_Error {
+read_metadata_entries :: proc(
+	r: ^Buffer_Reader,
+	allocator: mem.Allocator,
+) -> (
+	[]Metadata_Entry,
+	Protocol_Recv_Error,
+) {
+	entries := make([dynamic]Metadata_Entry, allocator)
+	defer delete(entries)
+
+	for {
+		header, err := br_read_byte(r)
+		if err != nil {return {}, err}
+		if header == METADATA_END_MARKER {break}
+
+		typ := header >> 5
+		idx := header & 0x1F
+		entry := Metadata_Entry{index = idx, type = typ}
+
+		switch typ {
+		case 0:
+			v, e := read_byte(r)
+			if e != nil {return {}, e}
+			entry.value = v
+		case 1:
+			v, e := read_short(r)
+			if e != nil {return {}, e}
+			entry.value = v
+		case 2:
+			v, e := read_int(r)
+			if e != nil {return {}, e}
+			entry.value = v
+		case 3:
+			v, e := read_float(r)
+			if e != nil {return {}, e}
+			entry.value = v
+		case 4:
+			v, e := read_string(r)
+			if e != nil {return {}, e}
+			entry.value = v
+		case 5:
+			v, e := read_item_slot(r, allocator)
+			if e != nil {return {}, e}
+			entry.value = v
+		case 6:
+			x, e0 := read_int(r)
+			if e0 != nil {return {}, e0}
+			y, e1 := read_int(r)
+			if e1 != nil {return {}, e1}
+			z, e2 := read_int(r)
+			if e2 != nil {return {}, e2}
+			entry.value = [3]i32{x, y, z}
+		case 7:
+			x, e0 := read_float(r)
+			if e0 != nil {return {}, e0}
+			y, e1 := read_float(r)
+			if e1 != nil {return {}, e1}
+			z, e2 := read_float(r)
+			if e2 != nil {return {}, e2}
+			entry.value = [3]f32{x, y, z}
+		case:
+			return {}, .Invalid_Argument
+		}
+		append(&entries, entry)
+	}
+
+	out := make([]Metadata_Entry, len(entries), allocator)
+	copy(out, entries[:])
+	return out, nil
+}
+
+write_metadata_entries :: proc(
+	w: ^Buffer_Writer,
+	entries: []Metadata_Entry,
+) -> Protocol_Send_Error {
+	for e in entries {
+		header := (e.type << 5) | (e.index & 0x1F)
+		if err := bw_write_byte(w, header); err != nil {
+			return err
+		}
+		#partial switch v in e.value {
+		case i8:
+			if err := bw_write_byte(w, u8(v)); err != nil {return err}
+		case i16:
+			if err := bw_write_int(w, i16, v); err != nil {return err}
+		case i32:
+			if err := bw_write_int(w, i32, v); err != nil {return err}
+		case f32:
+			if err := bw_write_int(w, f32, v); err != nil {return err}
+		case string:
+			if err := bw_write_string(w, v); err != nil {return err}
+		case Item_Slot:
+			if err := write_item_slot(w, v); err != nil {return err}
+		case [3]i32:
+			if err := bw_write_int(w, i32, v[0]); err != nil {return err}
+			if err := bw_write_int(w, i32, v[1]); err != nil {return err}
+			if err := bw_write_int(w, i32, v[2]); err != nil {return err}
+		case [3]f32:
+			if err := bw_write_int(w, f32, v[0]); err != nil {return err}
+			if err := bw_write_int(w, f32, v[1]); err != nil {return err}
+			if err := bw_write_int(w, f32, v[2]); err != nil {return err}
+		}
+	}
 	return bw_write_byte(w, METADATA_END_MARKER)
 }
 

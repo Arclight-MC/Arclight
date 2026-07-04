@@ -300,7 +300,7 @@ Spawn_Player :: struct {
 	yaw:          u8,
 	pitch:        u8,
 	current_item: i16,
-	metadata:     []u8,
+	metadata:     []Metadata_Entry,
 }
 
 write_spawn_player :: proc(w: ^Buffer_Writer, p: Spawn_Player) -> Protocol_Send_Error {
@@ -331,7 +331,7 @@ write_spawn_player :: proc(w: ^Buffer_Writer, p: Spawn_Player) -> Protocol_Send_
 	if err := bw_write_int(w, i16, p.current_item); err != nil {
 		return err
 	}
-	return bw_write_bytes(w, p.metadata)
+	return write_metadata_entries(w, p.metadata)
 }
 
 Destroy_Entities :: struct {
@@ -670,7 +670,7 @@ Spawn_Mob :: struct {
 	velocity_x: i16,
 	velocity_y: i16,
 	velocity_z: i16,
-	metadata:   []u8,
+	metadata:   []Metadata_Entry,
 }
 
 write_spawn_mob :: proc(w: ^Buffer_Writer, p: Spawn_Mob) -> Protocol_Send_Error {
@@ -710,7 +710,7 @@ write_spawn_mob :: proc(w: ^Buffer_Writer, p: Spawn_Mob) -> Protocol_Send_Error 
 	if err := bw_write_int(w, i16, p.velocity_z); err != nil {
 		return err
 	}
-	return bw_write_bytes(w, p.metadata)
+	return write_metadata_entries(w, p.metadata)
 }
 
 Time_Update :: struct {

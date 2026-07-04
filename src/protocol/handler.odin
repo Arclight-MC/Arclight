@@ -497,6 +497,137 @@ handle_client :: proc(
 					creative.slot,
 					creative.clicked_item.item_id,
 				)
+		case USE_ENTITY:
+				ue, err := read_use_entity(&packet.body)
+				if err != nil {
+					fmt.eprintfln("use_entity read error: %v", err)
+					break
+				}
+				fmt.printfln("Use entity: target=%d type=%d", ue.target, ue.type)
+			case PLAYER_DIGGING:
+				dig, err := read_player_digging(&packet.body)
+				if err != nil {
+					fmt.eprintfln("player_digging read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Digging: status=%d pos=(%d,%d,%d) face=%d",
+					dig.status,
+					dig.location.x,
+					dig.location.y,
+					dig.location.z,
+					dig.face,
+				)
+			case HELD_ITEM_CHANGE:
+				slot, err := read_held_item_change(&packet.body)
+				if err != nil {
+					fmt.eprintfln("held_item_change read error: %v", err)
+					break
+				}
+				fmt.printfln("Held item change: slot=%d", slot)
+			case ANIMATION:
+				err := read_animation(&packet.body)
+				if err != nil {
+					fmt.eprintfln("animation read error: %v", err)
+				}
+			case ENTITY_ACTION:
+				ea, err := read_entity_action(&packet.body)
+				if err != nil {
+					fmt.eprintfln("entity_action read error: %v", err)
+					break
+				}
+				fmt.printfln("Entity action: eid=%d action=%d param=%d", ea.entity_id, ea.action_id, ea.action_parameter)
+			case STEER_VEHICLE:
+				sv, err := read_steer_vehicle(&packet.body)
+				if err != nil {
+					fmt.eprintfln("steer_vehicle read error: %v", err)
+					break
+				}
+				fmt.printfln("Steer vehicle: sideways=%.2f forward=%.2f flags=%d", sv.sideways, sv.forward, sv.flags)
+			case CLOSE_WINDOW:
+				win, err := read_close_window(&packet.body)
+				if err != nil {
+					fmt.eprintfln("close_window read error: %v", err)
+					break
+				}
+				fmt.printfln("Close window: win=%d", win)
+			case CONFIRM_TRANSACTION:
+				ct, err := read_confirm_transaction(&packet.body)
+				if err != nil {
+					fmt.eprintfln("confirm_transaction read error: %v", err)
+					break
+				}
+				fmt.printfln("Confirm transaction: win=%d action=%d accepted=%t", ct.window_id, ct.action_number, ct.accepted)
+			case ENCHANT_ITEM:
+				slot, err := read_enchant_item(&packet.body)
+				if err != nil {
+					fmt.eprintfln("enchant_item read error: %v", err)
+					break
+				}
+				fmt.printfln("Enchant item: slot=%d", slot)
+			case UPDATE_SIGN:
+				sign, err := read_update_sign(&packet.body)
+				if err != nil {
+					fmt.eprintfln("update_sign read error: %v", err)
+					break
+				}
+				fmt.printfln(
+					"Sign update: pos=(%d,%d,%d) text=\"%s\"",
+					sign.location.x,
+					sign.location.y,
+					sign.location.z,
+					sign.text1,
+				)
+			case PLAYER_ABILITIES:
+				pa, err := read_player_abilities(&packet.body)
+				if err != nil {
+					fmt.eprintfln("player_abilities read error: %v", err)
+					break
+				}
+				fmt.printfln("Player abilities: flags=%d fly_speed=%.2f walk_speed=%.2f", pa.flags, pa.fly_speed, pa.walk_speed)
+			case TAB_COMPLETE:
+				tc, err := read_tab_complete(&packet.body)
+				if err != nil {
+					fmt.eprintfln("tab_complete read error: %v", err)
+					break
+				}
+				fmt.printfln("Tab complete: text=\"%s\" pos=%d", tc.text, tc.position)
+			case CLIENT_SETTINGS:
+				cs, err := read_client_settings(&packet.body)
+				if err != nil {
+					fmt.eprintfln("client_settings read error: %v", err)
+					break
+				}
+				fmt.printfln("Client settings: locale=%s view_dist=%d chat_mode=%d", cs.locale, cs.view_distance, cs.chat_mode)
+			case CLIENT_STATUS:
+				status, err := read_client_status(&packet.body)
+				if err != nil {
+					fmt.eprintfln("client_status read error: %v", err)
+					break
+				}
+				fmt.printfln("Client status: action=%d", status)
+			case PLUGIN_MESSAGE:
+				pm, err := read_plugin_message(&packet.body, allocator)
+				if err != nil {
+					fmt.eprintfln("plugin_message read error: %v", err)
+					break
+				}
+				fmt.printfln("Plugin message: channel=%s len=%d", pm.channel, len(pm.data))
+			case SPECTATE:
+				sp, err := read_spectate(&packet.body)
+				if err != nil {
+					fmt.eprintfln("spectate read error: %v", err)
+					break
+				}
+				_ = sp
+				fmt.println("Spectate packet received")
+			case RESOURCE_PACK_STATUS:
+				rp, err := read_resource_pack_status(&packet.body)
+				if err != nil {
+					fmt.eprintfln("resource_pack_status read error: %v", err)
+					break
+				}
+				fmt.printfln("Resource pack status: hash=%s result=%d", rp.hash, rp.result)
 			case:
 				fmt.eprintfln("Unhandled Play packet ID: 0x%x", packet.id)
 			}

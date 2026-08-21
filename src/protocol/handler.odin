@@ -472,6 +472,45 @@ handle_client :: proc(
 					block_place.face,
 					block_place.clicked_item.item_id,
 				)
+				if block_place.clicked_item.item_id >= 0 {
+					placed := block_place.location
+					switch block_place.face {
+					case 0:
+						placed.y -= 1
+					case 1:
+						placed.y += 1
+					case 2:
+						placed.z -= 1
+					case 3:
+						placed.z += 1
+					case 4:
+						placed.x -= 1
+					case 5:
+						placed.x += 1
+					}
+					dx := f64(placed.x) - current_player.x
+					dy := f64(placed.y) - current_player.y
+					dz := f64(placed.z) - current_player.z
+					if dx * dx + dy * dy + dz * dz <= 36.0 {
+						id := block_place.clicked_item.item_id
+						meta := u8(block_place.clicked_item.damage & 0x0F)
+						world.world_set_block_at(
+							&game_state.world,
+							placed.x,
+							placed.y,
+							placed.z,
+							world.Block{id = u8(id), metadata = meta},
+						)
+						body_buf: Buffer_Writer
+						buffer_writer_init(&body_buf, allocator)
+						write_block_change(
+							&body_buf,
+							Block_Change{location = placed, block_id = i32(id) << 4 | i32(meta)},
+						)
+						send_framed(client, body_buf.buf[:])
+						buffer_writer_destroy(&body_buf)
+					}
+				}
 			case CLICK_WINDOW:
 				click, err := read_click_window(&packet.body, allocator)
 				if err != nil {
@@ -518,6 +557,28 @@ handle_client :: proc(
 					dig.location.z,
 					dig.face,
 				)
+				if dig.status == 2 {
+					dx := f64(dig.location.x) - current_player.x
+					dy := f64(dig.location.y) - current_player.y
+					dz := f64(dig.location.z) - current_player.z
+					if dx * dx + dy * dy + dz * dz <= 36.0 {
+						world.world_set_block_at(
+							&game_state.world,
+							dig.location.x,
+							dig.location.y,
+							dig.location.z,
+							world.BLOCK_AIR,
+						)
+						body_buf: Buffer_Writer
+						buffer_writer_init(&body_buf, allocator)
+						write_block_change(
+							&body_buf,
+							Block_Change{location = dig.location, block_id = 0},
+						)
+						send_framed(client, body_buf.buf[:])
+						buffer_writer_destroy(&body_buf)
+					}
+				}
 			case HELD_ITEM_CHANGE:
 				slot, err := read_held_item_change(&packet.body)
 				if err != nil {
@@ -525,6 +586,7 @@ handle_client :: proc(
 					break
 				}
 				fmt.printfln("Held item change: slot=%d", slot)
+				current_player.held_slot = slot
 			case ANIMATION:
 				err := read_animation(&packet.body)
 				if err != nil {

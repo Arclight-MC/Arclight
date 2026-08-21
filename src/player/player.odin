@@ -12,9 +12,9 @@ FRICTION :: 0.91
 FLY_SPEED :: 10.0
 PLAYER_HEIGHT :: 1.62
 
-// Represents a player's position, velocity, and flight state. Methods:
-// player_init creates a default player; get_ground_height finds the floor;
-// update_physics applies gravity/ground collision each tick;
+// Represents a player's position, velocity, flight state, and held item slot.
+// Methods: player_init creates a default player; get_ground_height finds the
+// floor; update_physics applies gravity/ground collision each tick;
 // apply_movement_input maps WASD input to velocity (stub).
 Player :: struct {
 	x:          f64,
@@ -29,6 +29,7 @@ Player :: struct {
 	is_flying:  bool,
 	entity_id:  i32,
 	name:       string,
+	held_slot:  i16,
 }
 
 // Creates a Player at the world origin with default velocity and no motion.
@@ -46,6 +47,7 @@ player_init :: proc(entity_id: i32, name: string) -> Player {
 		is_flying = false,
 		entity_id = entity_id,
 		name = name,
+		held_slot = 0,
 	}
 }
 

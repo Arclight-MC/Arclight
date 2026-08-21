@@ -26,6 +26,7 @@ CB_SPAWN_OBJECT :: 0x0E
 CB_SPAWN_MOB :: 0x0F
 CB_DESTROY_ENTITIES :: 0x13
 CB_ENTITY_TELEPORT :: 0x18
+CB_BLOCK_CHANGE :: 0x23
 CB_CHUNK_DATA :: 0x21
 CB_SET_SLOT :: 0x2F
 CB_WINDOW_ITEMS :: 0x30
@@ -198,6 +199,22 @@ write_keep_alive :: proc(w: ^Buffer_Writer, p: Keep_Alive) -> Protocol_Send_Erro
 		return err
 	}
 	return bw_write_varint(w, i64(p.keep_alive_id))
+}
+
+Block_Change :: struct {
+	location: Position,
+	block_id: i32,
+}
+
+// Writes a block change packet (0x23): position + new block ID.
+write_block_change :: proc(w: ^Buffer_Writer, p: Block_Change) -> Protocol_Send_Error {
+	if err := bw_write_varint(w, CB_BLOCK_CHANGE); err != nil {
+		return err
+	}
+	if err := bw_write_position(w, p.location.x, p.location.y, p.location.z); err != nil {
+		return err
+	}
+	return bw_write_varint(w, i64(p.block_id))
 }
 
 Chunk_Data :: struct {
